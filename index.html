@@ -223,7 +223,6 @@ const CFG = {
   ALT_META_M: 4000,               // al llegar acá se gana
   ESTRELLAS_DESDE_M: 2100, ESTRELLAS_HASTA_M: 3400,    // rampa de aparición de estrellas
   TIERRA_DESDE_M: 2900,  TIERRA_HASTA_M: 3800,         // rampa de aparición de la Tierra
-  NUBES_DECOR_HASTA_M: 1500,      // las nubes de fondo desaparecen antes de esta altura
   CIRROS_DESDE_M: 700,  CIRROS_HASTA_M: 3000,          // ventana en la que se ven cirros
 
   // --- Cámara ---------------------------------------------------------------------
@@ -499,7 +498,6 @@ const geoRayo = crearGeoRayo();
 const matNube     = new THREE.MeshLambertMaterial({ color: colorLineal('#ffffff') });
 const matTormenta = new THREE.MeshLambertMaterial({ color: colorLineal('#3a3e4b') });
 const matRayo     = new THREE.MeshBasicMaterial({ color: colorLineal('#ffe94a') });
-const matDecor    = new THREE.MeshLambertMaterial({ color: colorLineal('#ffffff'), transparent: true, opacity: 0.9, depthWrite: false });
 const matCirros   = new THREE.MeshLambertMaterial({ color: colorLineal('#dfe9ff'), transparent: true, opacity: 0, depthWrite: false });
 
 // ---- Pool de nubes (plataformas): se reciclan, nunca se crean durante el juego ----------
@@ -539,19 +537,13 @@ const ALTURA_CIUDAD = -9;
   escena.add(grupo);
 })();
 
-// ---- Decorado: nubes de fondo (parallax por profundidad) y cirros -------------------------------
-const nubesDecor = [], cirros = [];
-for (let i = 0; i < 12; i++) {
-  const m = new THREE.Mesh(geoNube, matDecor);
-  const s = azar(1.6, 3.4); m.scale.set(s, s * 0.8, s);
-  m.position.set(azar(-28, 28), azar(-14, 20), azar(-14, -28));
-  m.userData.vx = azar(0.15, 0.5) * signo();
-  escena.add(m); nubesDecor.push(m);
-}
+// ---- Decorado: cirros (solo entre ~700 y ~3000 m). Son rayas finas y translúcidas, lejos del plano de
+// juego, para que no se confundan con las nubes-plataforma. No hay otras nubes de fondo a propósito.
+const cirros = [];
 for (let i = 0; i < 8; i++) {
   const m = new THREE.Mesh(geoNube, matCirros);
-  m.scale.set(azar(4, 7), 0.35, 1.2);
-  m.position.set(azar(-30, 30), azar(-14, 20), azar(-20, -32));
+  m.scale.set(azar(5, 9), 0.18, 1.0);
+  m.position.set(azar(-40, 40), azar(-14, 20), azar(-28, -40));
   m.userData.vx = azar(0.3, 0.8) * signo();
   escena.add(m); cirros.push(m);
 }
@@ -559,8 +551,8 @@ for (let i = 0; i < 8; i++) {
 function reciclarDecor(lista, dt, camY) {
   for (const m of lista) {
     m.position.x += m.userData.vx * dt;
-    if (m.position.x > 34) m.position.x = -34; else if (m.position.x < -34) m.position.x = 34;
-    if (m.position.y < camY - 20) { m.position.y += 40 + azar(0, 6); m.position.x = azar(-30, 30); }
+    if (m.position.x > 44) m.position.x = -44; else if (m.position.x < -44) m.position.x = 44;
+    if (m.position.y < camY - 20) { m.position.y += 40 + azar(0, 6); m.position.x = azar(-40, 40); }
   }
 }
 
@@ -900,9 +892,7 @@ function actualizarCielo(m) {
   tierra.visible = tT > 0;
   matTierra.opacity = tT; matAtmosfera.opacity = 0.4 * tT; matContinentes.opacity = tT; matNubesTierra.opacity = 0.9 * tT;
 
-  const mitad = CFG.NUBES_DECOR_HASTA_M * 0.5;
-  matDecor.opacity = 0.9 * (1 - clamp01((m - mitad) / mitad));
-  matCirros.opacity = 0.7 * clamp01((m - CFG.CIRROS_DESDE_M) / 500) * (1 - clamp01((m - (CFG.CIRROS_HASTA_M - 700)) / 700));
+  matCirros.opacity = 0.45 * clamp01((m - CFG.CIRROS_DESDE_M) / 500) * (1 - clamp01((m - (CFG.CIRROS_HASTA_M - 700)) / 700));
 
   luzHemi.groundColor.copy(sueloClaro).lerp(sueloOscuro, dificultad(m));   // luz más fría en la altura
 }
@@ -943,7 +933,7 @@ function actualizarVisual(dt, ahora) {
   const mCam = metros(J.camY - CFG.CAM_OFFSET_Y);
   actualizarCielo(mCam);
   actualizarEstrellas(J.camY);
-  reciclarDecor(nubesDecor, dt, J.camY); reciclarDecor(cirros, dt, J.camY);
+  reciclarDecor(cirros, dt, J.camY);
   tierra.position.set(0, J.camY - 43, -46); tierra.rotation.y += dt * 0.04;
 
   // Destello rojo al chocar

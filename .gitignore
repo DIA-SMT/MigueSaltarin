@@ -5,3 +5,5 @@ _src/base_basic_*.glb
 # Configuración local del editor / respaldos
 .claude/
 *.bak
+# Música del stand: copia local, no se publica en el repo (derechos de autor)
+assets/*.mp3

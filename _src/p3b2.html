@@ -1,16 +1,10 @@
-// ---- Decorado: nubes de fondo (parallax por profundidad) y cirros -------------------------------
-const nubesDecor = [], cirros = [];
-for (let i = 0; i < 12; i++) {
-  const m = new THREE.Mesh(geoNube, matDecor);
-  const s = azar(1.6, 3.4); m.scale.set(s, s * 0.8, s);
-  m.position.set(azar(-28, 28), azar(-14, 20), azar(-14, -28));
-  m.userData.vx = azar(0.15, 0.5) * signo();
-  escena.add(m); nubesDecor.push(m);
-}
+// ---- Decorado: cirros (solo entre ~700 y ~3000 m). Son rayas finas y translúcidas, lejos del plano de
+// juego, para que no se confundan con las nubes-plataforma. No hay otras nubes de fondo a propósito.
+const cirros = [];
 for (let i = 0; i < 8; i++) {
   const m = new THREE.Mesh(geoNube, matCirros);
-  m.scale.set(azar(4, 7), 0.35, 1.2);
-  m.position.set(azar(-30, 30), azar(-14, 20), azar(-20, -32));
+  m.scale.set(azar(5, 9), 0.18, 1.0);
+  m.position.set(azar(-40, 40), azar(-14, 20), azar(-28, -40));
   m.userData.vx = azar(0.3, 0.8) * signo();
   escena.add(m); cirros.push(m);
 }
@@ -18,8 +12,8 @@ for (let i = 0; i < 8; i++) {
 function reciclarDecor(lista, dt, camY) {
   for (const m of lista) {
     m.position.x += m.userData.vx * dt;
-    if (m.position.x > 34) m.position.x = -34; else if (m.position.x < -34) m.position.x = 34;
-    if (m.position.y < camY - 20) { m.position.y += 40 + azar(0, 6); m.position.x = azar(-30, 30); }
+    if (m.position.x > 44) m.position.x = -44; else if (m.position.x < -44) m.position.x = 44;
+    if (m.position.y < camY - 20) { m.position.y += 40 + azar(0, 6); m.position.x = azar(-40, 40); }
   }
 }
 
