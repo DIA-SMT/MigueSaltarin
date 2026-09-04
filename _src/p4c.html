@@ -48,6 +48,9 @@ function cuadro(ahora) {
     reciclar(); generarHastaCubrir();
   }
   actualizarVisual(dt, ahora);
+  renderizar();
+}
+function renderizar() {   // fondo (degradado) y luego la escena del juego
   renderer.clear();
   renderer.render(escenaFondo, camFondo);
   renderer.render(escena, camara);
@@ -65,11 +68,11 @@ function teletransportar(m) {
   J.px = 0; J.py = y; J.vx = 0;
   J.camY = J.camObjetivo = y + CFG.CAM_OFFSET_Y;
   J.filas = [{ y, xPrincipal: 0, xs: [0], principalMovil: false }]; J.ultimaFilaY = y;
-  activarNube(0, y, 4.6, 0); generarHastaCubrir();
+  activarNube(0, y, 4.6, 0, m >= CFG.ALT_ESPACIO_M); generarHastaCubrir();
   if (J.estado !== 'jugando') empezar();
   J.vy = CFG.FUERZA_SALTO;
 }
-window.MIGUE_DEBUG = { J, CFG, teletransportar, nubes, tormentas, renderer, pasoFisica };
+window.MIGUE_DEBUG = { J, CFG, teletransportar, nubes, tormentas, renderer, pasoFisica, actualizarVisual, renderizar };
 
 } // fin de iniciarJuego()
 

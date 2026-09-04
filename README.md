@@ -8,7 +8,8 @@ automáticamente de nube en nube; hay que llegar a los **4.000 m** (el espacio) 
 - **Solo dos teclas: ← y →.** Mueven a Migue, y también sirven para **empezar** y **reintentar**.
 - Si Migue sale por un costado, aparece por el otro.
 - Las tormentas (nube gris con rayo) hacen caer a Migue. Caer por debajo de la pantalla = perder.
-- El score es la altura. Al llegar a 4.000 m se gana y se muestra altura y tiempo.
+- Al llegar al espacio (desde ~2.200 m, ver `CFG.ALT_ESPACIO_M`) las nubes pasan a ser rocas espaciales y las tormentas, agujeros negros. Se pisan y se esquivan igual.
+- El score es la altura. El cielo cambia con ella: celeste con la ciudad abajo → azul profundo con cirros (700 m) → estratósfera violeta con las primeras estrellas (1.200 m) → casi negro con la Tierra asomando (2.000 m) → espacio (3.000 m). Al llegar a 4.000 m se gana y se muestra altura y tiempo.
 
 ## Cómo abrirlo
 

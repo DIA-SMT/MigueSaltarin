@@ -210,20 +210,28 @@ const CFG = {
   ALT_TORMENTAS_M: 800,           // desde esta altura (m) aparecen tormentas
   PROB_TORMENTA_INICIAL: 0.25,    // probabilidad de tormenta entre dos filas al pasar esa altura...
   PROB_TORMENTA_FINAL: 0.65,      // ...y al llegar a la meta
-  RADIO_TORMENTA: 0.9,            // radio de colisión
+  RADIO_TORMENTA: 0.9,            // radio de colisión de la tormenta
+  RADIO_AGUJERO: 0.75,            // radio de colisión del agujero negro (es más chico a la vista)
   SEG_TORMENTA: 2.7,              // distancia horizontal mínima entre la tormenta y el camino seguro / las nubes cercanas
 
+  // --- Espacio: a partir de acá las nubes son rocas espaciales y las tormentas, agujeros negros ---
+  ALT_ESPACIO_M: 2200,            // altura (m) a la que el cambio ya es total
+  TRANSICION_ESPACIO_M: 400,      // metros previos en los que ambos tipos se mezclan (transición gradual)
+
   // --- Capas del cielo (la altura es el score). Colores del degradado arriba/abajo -
+  // La progresión está comprimida a propósito: siempre hay algo cambiando mientras se sube.
   CAPAS: [
     { m: 0,    arriba: '#2f8fe8', abajo: '#bde8ff' },   // cielo celeste, ciudad abajo
-    { m: 1000, arriba: '#082566', abajo: '#3d84d4' },   // azul profundo, cirros
-    { m: 2500, arriba: '#0a0520', abajo: '#3b1e68' },   // estratósfera violeta, empiezan estrellas
+    { m: 700,  arriba: '#0c3a8f', abajo: '#5a9be0' },   // azul profundo, cirros
+    { m: 1200, arriba: '#1a0f45', abajo: '#2f5fb0' },   // empieza la estratósfera: violeta arriba, primeras estrellas
+    { m: 2000, arriba: '#07031c', abajo: '#3a1e68' },   // estratósfera alta: casi negro, la Tierra se insinúa abajo
+    { m: 3000, arriba: '#000002', abajo: '#120a2a' },   // borde del espacio
     { m: 4000, arriba: '#000002', abajo: '#04020d' },   // ESPACIO
   ],
   ALT_META_M: 4000,               // al llegar acá se gana
-  ESTRELLAS_DESDE_M: 2100, ESTRELLAS_HASTA_M: 3400,    // rampa de aparición de estrellas
-  TIERRA_DESDE_M: 2900,  TIERRA_HASTA_M: 3800,         // rampa de aparición de la Tierra
-  CIRROS_DESDE_M: 700,  CIRROS_HASTA_M: 3000,          // ventana en la que se ven cirros
+  ESTRELLAS_DESDE_M: 1100, ESTRELLAS_HASTA_M: 2200,    // rampa de aparición de estrellas
+  TIERRA_DESDE_M: 1800,  TIERRA_HASTA_M: 3000,         // rampa de aparición de la Tierra
+  CIRROS_DESDE_M: 500,  CIRROS_HASTA_M: 1700,          // ventana en la que se ven cirros
 
   // --- Cámara ---------------------------------------------------------------------
   FOV: 50,
@@ -491,13 +499,40 @@ function crearGeoRayo() {
   s.lineTo(0.38, -0.42); s.lineTo(0.1, -0.42); s.lineTo(0.34, 0);
   return new THREE.ShapeGeometry(s);
 }
+// Roca espacial = icosaedro con los vértices "arrugados" de forma determinista (misma posición → mismo
+// desplazamiento, así no se abren grietas) y normales por cara para que se vea facetada. Ancho ≈ 2.4.
+const ANCHO_GEO_ROCA = 2.4;
+function crearGeoRoca(semilla) {
+  const g = new THREE.IcosahedronGeometry(1, 1);   // ya viene sin índice (80 caras)
+  const pos = g.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    const r = 1 + 0.28 * Math.sin(semilla + v.x * 7.1 + v.y * 5.3 + v.z * 3.7) * Math.cos(semilla * 1.7 + v.y * 6.2 - v.z * 4.1);
+    v.multiplyScalar(r);
+    pos.setXYZ(i, v.x * 1.1, v.y, v.z * 0.95);
+  }
+  g.computeVertexNormals();
+  return g;
+}
 const geoNube = crearGeoNube();
 const geoRayo = crearGeoRayo();
+const geoRocas = [crearGeoRoca(1.3), crearGeoRoca(4.2), crearGeoRoca(7.9)];
 
 // ---- Materiales compartidos (Lambert: el más barato con iluminación) ------------------
 const matNube     = new THREE.MeshLambertMaterial({ color: colorLineal('#ffffff') });
 const matTormenta = new THREE.MeshLambertMaterial({ color: colorLineal('#3a3e4b') });
 const matRayo     = new THREE.MeshBasicMaterial({ color: colorLineal('#ffe94a') });
+const matRoca     = new THREE.MeshLambertMaterial({ color: colorLineal('#9a8f84') });
+// Agujero negro: esfera negra + disco de acreción (anillo) + arco brillante que gira, todo inclinado
+const geoEsferaNegra = new THREE.SphereGeometry(0.5, 20, 14);
+const geoDisco = new THREE.RingGeometry(0.62, 1.05, 40, 1);
+const geoArco  = new THREE.RingGeometry(0.72, 1.15, 40, 1, 0, 4.4);
+const matNegro = new THREE.MeshBasicMaterial({ color: 0x000000 });
+const geoAnillo = new THREE.RingGeometry(0.5, 0.58, 40, 1);   // "anillo de fotones": borde brillante del agujero
+// Sin depthWrite y con renderOrder para que disco y arco (coplanares) no hagan z-fighting entre sí
+const matDisco  = new THREE.MeshBasicMaterial({ color: colorLineal('#ff9a3c'), transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false });
+const matArco   = new THREE.MeshBasicMaterial({ color: colorLineal('#fff1c9'), transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false });
+const matAnillo = new THREE.MeshBasicMaterial({ color: colorLineal('#ffd9a0'), transparent: true, opacity: 0.95, depthWrite: false });
 const matCirros   = new THREE.MeshLambertMaterial({ color: colorLineal('#dfe9ff'), transparent: true, opacity: 0, depthWrite: false });
 
 // ---- Pool de nubes (plataformas): se reciclan, nunca se crean durante el juego ----------
@@ -507,14 +542,21 @@ for (let i = 0; i < CFG.POOL_NUBES; i++) {
   mesh.visible = false; escena.add(mesh);
   nubes.push({ mesh, activa: false, x: 0, y: 0, mitad: 1, vx: 0, rebote: 0 });
 }
-// ---- Pool de tormentas: nube gris oscura + rayo ---------------------------------------------
+// ---- Pool de obstáculos: tormenta (nube gris oscura + rayo) o agujero negro, según la altura ------
 const tormentas = [];
 for (let i = 0; i < CFG.POOL_TORMENTAS; i++) {
   const grupo = new THREE.Group();
   const nube = new THREE.Mesh(geoNube, matTormenta); nube.scale.set(0.62, 0.55, 0.62);
   const rayo = new THREE.Mesh(geoRayo, matRayo); rayo.position.set(0, -0.25, 0.4); rayo.scale.set(1.15, 1.15, 1);
-  grupo.add(nube, rayo); grupo.visible = false; escena.add(grupo);
-  tormentas.push({ grupo, rayo, activa: false, x: 0, y: 0, t: Math.random() * 10 });
+  const agujero = new THREE.Group();
+  const disco = new THREE.Mesh(geoDisco, matDisco); disco.rotation.x = -1.3; disco.renderOrder = 1;   // casi de canto: elipse fina
+  const arco = new THREE.Mesh(geoArco, matArco); arco.rotation.x = -1.3; arco.renderOrder = 2;
+  const anillo = new THREE.Mesh(geoAnillo, matAnillo); anillo.renderOrder = 3;                          // de frente a la cámara
+  agujero.add(new THREE.Mesh(geoEsferaNegra, matNegro), disco, arco, anillo);
+  agujero.rotation.z = 0.3;   // disco ladeado
+  agujero.visible = false;
+  grupo.add(nube, rayo, agujero); grupo.visible = false; escena.add(grupo);
+  tormentas.push({ grupo, nube, rayo, agujero, arco, esAgujero: false, activa: false, x: 0, y: 0, t: Math.random() * 10 });
 }
 
 // ---- Decorado: ciudad (queda abajo, se ve al empezar y desaparece al subir) ------------------
@@ -679,17 +721,29 @@ const dificultad = m => clamp01(m / CFG.ALT_META_M);   // 0 al empezar, 1 en la 
 const rampa = (m, desde, ini, fin) => m < desde ? 0 : lerp(ini, fin, clamp01((m - desde) / Math.max(1, CFG.ALT_META_M - desde)));
 
 // ---- Uso de los pools ----------------------------------------------------------------------------
-function activarNube(x, y, ancho, vx) {
+// Plataforma: nube (o roca espacial si esRoca). "y" es la superficie donde se pisa; el mesh queda debajo.
+function activarNube(x, y, ancho, vx, esRoca) {
   const n = nubes.find(n => !n.activa); if (!n) return null;
-  n.activa = true; n.x = x; n.y = y; n.mitad = ancho / 2; n.vx = vx; n.rebote = 0;
+  n.activa = true; n.x = x; n.y = y; n.mitad = ancho / 2; n.vx = vx; n.rebote = 0; n.esRoca = !!esRoca;
+  if (n.esRoca) {
+    n.mesh.geometry = geoRocas[(nubes.indexOf(n) + Math.floor(Math.abs(y))) % geoRocas.length];
+    n.mesh.material = matRoca; n.escalaY = 0.55;
+    n.mesh.scale.set(ancho / ANCHO_GEO_ROCA, n.escalaY, 0.8);
+    n.mesh.position.set(x, y - 0.62, 0);
+  } else {
+    n.mesh.geometry = geoNube; n.mesh.material = matNube; n.escalaY = 0.75;
+    n.mesh.scale.set(ancho / ANCHO_GEO_NUBE, n.escalaY, 0.8);
+    n.mesh.position.set(x, y - 0.45, 0);
+  }
   n.mesh.visible = true;
-  n.mesh.scale.set(ancho / ANCHO_GEO_NUBE, 0.75, 0.8);
-  n.mesh.position.set(x, y - 0.45, 0);   // "y" es la superficie donde se pisa; la nube queda debajo
   return n;
 }
-function activarTormenta(x, y) {
+// Obstáculo: tormenta (o agujero negro si esAgujero). Misma colisión en ambos casos.
+function activarTormenta(x, y, esAgujero) {
   const t = tormentas.find(t => !t.activa); if (!t) return null;
-  t.activa = true; t.x = x; t.y = y; t.grupo.visible = true; t.grupo.position.set(x, y, 0);
+  t.activa = true; t.x = x; t.y = y; t.esAgujero = !!esAgujero;
+  t.nube.visible = t.rayo.visible = !t.esAgujero; t.agujero.visible = t.esAgujero;
+  t.grupo.visible = true; t.grupo.position.set(x, y, 0);
   return t;
 }
 function desactivarTodo() {
@@ -721,6 +775,9 @@ function generarFila() {
   const probT = rampa(m, CFG.ALT_TORMENTAS_M, CFG.PROB_TORMENTA_INICIAL, CFG.PROB_TORMENTA_FINAL);
   const conTormenta = !prev.principalMovil && Math.random() < probT;
 
+  // Aspecto: nubes/tormentas abajo, rocas/agujeros negros en el espacio, mezclados en la transición
+  const probEspacio = clamp01((m - (CFG.ALT_ESPACIO_M - CFG.TRANSICION_ESPACIO_M)) / CFG.TRANSICION_ESPACIO_M);
+
   // Nube principal
   // Corrimiento horizontal REALMENTE alcanzable para esta separación: lo que Migue recorre a velocidad
   // máxima en el tiempo que tarda en volver bajando a la altura "sep" (descontando la aceleración desde 0).
@@ -730,33 +787,38 @@ function generarFila() {
   const dxMax = Math.min(CFG.DX_MAX_FILA, alcance * 0.9);
   const x1 = envolverX(prev.xPrincipal + azar(-dxMax, dxMax));
   const movil1 = !conTormenta && Math.random() < probMovil;
-  if (!activarNube(x1, y, ancho, movil1 ? velMovil() : 0)) return false;   // pool agotado (no debería pasar)
+  if (!activarNube(x1, y, ancho, movil1 ? velMovil() : 0, Math.random() < probEspacio)) return false;   // pool agotado (no debería pasar)
   const fila = { y, xPrincipal: x1, xs: [x1], principalMovil: movil1 };
 
   // Segunda nube (opcional), bien separada de la principal
   if (Math.random() < lerp(CFG.PROB_SEGUNDA_NUBE_INICIAL, CFG.PROB_SEGUNDA_NUBE_FINAL, t)) {
     const x2 = envolverX(x1 + signo() * azar(4.5, CFG.ANCHO_MUNDO / 2));
     const movil2 = !conTormenta && Math.random() < probMovil;
-    if (activarNube(x2, y, ancho, movil2 ? velMovil() : 0)) fila.xs.push(x2);
+    if (activarNube(x2, y, ancho, movil2 ? velMovil() : 0, Math.random() < probEspacio)) fila.xs.push(x2);
   }
-  if (conTormenta) colocarTormenta(prev, fila);
+  if (conTormenta) colocarTormenta(prev, fila, probEspacio);
 
   J.filas.push(fila); if (J.filas.length > 6) J.filas.shift();
   J.ultimaFilaY = y;
   return true;
 }
 // La tormenta se ubica lejos del trayecto recto entre las dos nubes principales (en espacio
-// envuelto) y lejos de cualquier nube de las dos filas. Si no hay lugar, no se pone.
-function colocarTormenta(filaAbajo, filaArriba) {
+// envuelto) y lejos, en X, de cualquier nube desde la que Migue pueda llegar a su altura rebotando
+// (no solo las dos filas vecinas: desde una nube dos filas más abajo el salto también llega).
+// Si no hay lugar, no se pone.
+function colocarTormenta(filaAbajo, filaArriba, probEspacio) {
   const seg = CFG.SEG_TORMENTA, a = filaAbajo.xPrincipal, d = envolverX(filaArriba.xPrincipal - a);
   const yT = (filaAbajo.y + filaArriba.y) / 2 + azar(-0.15, 0.15);
+  const alturaSalto = CFG.FUERZA_SALTO * CFG.FUERZA_SALTO / (2 * -CFG.GRAVEDAD);
+  const alcance = alturaSalto + CFG.ALTO_MIGUE + CFG.RADIO_TORMENTA;   // desde qué distancia vertical hacia abajo una nube "llega" a la tormenta
+  const filasCercanas = J.filas.filter(f => f.y <= yT && f.y >= yT - alcance).concat([filaArriba]);
   for (let intento = 0; intento < 14; intento++) {
     const x = azar(-CFG.ANCHO_MUNDO / 2, CFG.ANCHO_MUNDO / 2);
     let libre = true;
     for (let k = 0; k <= 8 && libre; k++) if (distX(x, a + d * k / 8) < seg) libre = false;   // muestreo del camino a→b
     if (!libre) continue;
-    if (filaAbajo.xs.concat(filaArriba.xs).some(px => distX(x, px) < seg)) continue;
-    activarTormenta(x, yT);
+    if (filasCercanas.some(f => f.xs.some(px => distX(x, px) < seg))) continue;
+    activarTormenta(x, yT, Math.random() < probEspacio);
     return true;
   }
   return false;
@@ -830,9 +892,10 @@ function pasoFisica(dt) {
       }
     }
     // Tormentas: colisión círculo-círculo (con wrap-around en X)
-    const cy = J.py + CFG.ALTO_MIGUE * 0.5, r = CFG.RADIO_TORMENTA + CFG.RADIO_MIGUE;
+    const cy = J.py + CFG.ALTO_MIGUE * 0.5;
     for (const t of tormentas) {
       if (!t.activa) continue;
+      const r = (t.esAgujero ? CFG.RADIO_AGUJERO : CFG.RADIO_TORMENTA) + CFG.RADIO_MIGUE;
       const dx = envolverX(J.px - t.x), dy = cy - t.y;
       if (dx * dx + dy * dy < r * r) { golpear(t); break; }
     }
@@ -921,11 +984,13 @@ function actualizarVisual(dt, ahora) {
     pivote.rotation.y = lerp(pivote.rotation.y, CFG.MIGUE_ROT_Y + clamp(J.vx * 0.09, -0.7, 0.7), k);
   }
 
-  // Nubes: rebotan un poquito al pisarlas. Tormentas: el rayo parpadea y la nube flota.
-  for (const n of nubes) if (n.activa && n.rebote > 0) { n.rebote = Math.max(0, n.rebote - dt * 4); n.mesh.scale.y = 0.75 * (1 - 0.35 * n.rebote); }
+  // Plataformas: se hunden un poquito al pisarlas (las rocas casi nada). Obstáculos: el rayo parpadea
+  // o el disco del agujero negro gira; ambos flotan.
+  for (const n of nubes) if (n.activa && n.rebote > 0) { n.rebote = Math.max(0, n.rebote - dt * 4); n.mesh.scale.y = n.escalaY * (1 - (n.esRoca ? 0.1 : 0.35) * n.rebote); }
   for (const t of tormentas) if (t.activa) {
     t.t += dt;
-    t.rayo.visible = (Math.sin(t.t * 9) + Math.sin(t.t * 23)) > -0.6;
+    if (t.esAgujero) { t.arco.rotation.z += dt * 1.8; t.agujero.rotation.y = Math.sin(t.t * 0.7) * 0.3; }
+    else t.rayo.visible = (Math.sin(t.t * 9) + Math.sin(t.t * 23)) > -0.6;
     t.grupo.position.y = t.y + Math.sin(t.t * 2) * 0.06;
   }
 
@@ -994,6 +1059,9 @@ function cuadro(ahora) {
     reciclar(); generarHastaCubrir();
   }
   actualizarVisual(dt, ahora);
+  renderizar();
+}
+function renderizar() {   // fondo (degradado) y luego la escena del juego
   renderer.clear();
   renderer.render(escenaFondo, camFondo);
   renderer.render(escena, camara);
@@ -1011,11 +1079,11 @@ function teletransportar(m) {
   J.px = 0; J.py = y; J.vx = 0;
   J.camY = J.camObjetivo = y + CFG.CAM_OFFSET_Y;
   J.filas = [{ y, xPrincipal: 0, xs: [0], principalMovil: false }]; J.ultimaFilaY = y;
-  activarNube(0, y, 4.6, 0); generarHastaCubrir();
+  activarNube(0, y, 4.6, 0, m >= CFG.ALT_ESPACIO_M); generarHastaCubrir();
   if (J.estado !== 'jugando') empezar();
   J.vy = CFG.FUERZA_SALTO;
 }
-window.MIGUE_DEBUG = { J, CFG, teletransportar, nubes, tormentas, renderer, pasoFisica };
+window.MIGUE_DEBUG = { J, CFG, teletransportar, nubes, tormentas, renderer, pasoFisica, actualizarVisual, renderizar };
 
 } // fin de iniciarJuego()
 

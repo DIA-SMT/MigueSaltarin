@@ -16,6 +16,9 @@ function generarFila() {
   const probT = rampa(m, CFG.ALT_TORMENTAS_M, CFG.PROB_TORMENTA_INICIAL, CFG.PROB_TORMENTA_FINAL);
   const conTormenta = !prev.principalMovil && Math.random() < probT;
 
+  // Aspecto: nubes/tormentas abajo, rocas/agujeros negros en el espacio, mezclados en la transición
+  const probEspacio = clamp01((m - (CFG.ALT_ESPACIO_M - CFG.TRANSICION_ESPACIO_M)) / CFG.TRANSICION_ESPACIO_M);
+
   // Nube principal
   // Corrimiento horizontal REALMENTE alcanzable para esta separación: lo que Migue recorre a velocidad
   // máxima en el tiempo que tarda en volver bajando a la altura "sep" (descontando la aceleración desde 0).
@@ -25,33 +28,38 @@ function generarFila() {
   const dxMax = Math.min(CFG.DX_MAX_FILA, alcance * 0.9);
   const x1 = envolverX(prev.xPrincipal + azar(-dxMax, dxMax));
   const movil1 = !conTormenta && Math.random() < probMovil;
-  if (!activarNube(x1, y, ancho, movil1 ? velMovil() : 0)) return false;   // pool agotado (no debería pasar)
+  if (!activarNube(x1, y, ancho, movil1 ? velMovil() : 0, Math.random() < probEspacio)) return false;   // pool agotado (no debería pasar)
   const fila = { y, xPrincipal: x1, xs: [x1], principalMovil: movil1 };
 
   // Segunda nube (opcional), bien separada de la principal
   if (Math.random() < lerp(CFG.PROB_SEGUNDA_NUBE_INICIAL, CFG.PROB_SEGUNDA_NUBE_FINAL, t)) {
     const x2 = envolverX(x1 + signo() * azar(4.5, CFG.ANCHO_MUNDO / 2));
     const movil2 = !conTormenta && Math.random() < probMovil;
-    if (activarNube(x2, y, ancho, movil2 ? velMovil() : 0)) fila.xs.push(x2);
+    if (activarNube(x2, y, ancho, movil2 ? velMovil() : 0, Math.random() < probEspacio)) fila.xs.push(x2);
   }
-  if (conTormenta) colocarTormenta(prev, fila);
+  if (conTormenta) colocarTormenta(prev, fila, probEspacio);
 
   J.filas.push(fila); if (J.filas.length > 6) J.filas.shift();
   J.ultimaFilaY = y;
   return true;
 }
 // La tormenta se ubica lejos del trayecto recto entre las dos nubes principales (en espacio
-// envuelto) y lejos de cualquier nube de las dos filas. Si no hay lugar, no se pone.
-function colocarTormenta(filaAbajo, filaArriba) {
+// envuelto) y lejos, en X, de cualquier nube desde la que Migue pueda llegar a su altura rebotando
+// (no solo las dos filas vecinas: desde una nube dos filas más abajo el salto también llega).
+// Si no hay lugar, no se pone.
+function colocarTormenta(filaAbajo, filaArriba, probEspacio) {
   const seg = CFG.SEG_TORMENTA, a = filaAbajo.xPrincipal, d = envolverX(filaArriba.xPrincipal - a);
   const yT = (filaAbajo.y + filaArriba.y) / 2 + azar(-0.15, 0.15);
+  const alturaSalto = CFG.FUERZA_SALTO * CFG.FUERZA_SALTO / (2 * -CFG.GRAVEDAD);
+  const alcance = alturaSalto + CFG.ALTO_MIGUE + CFG.RADIO_TORMENTA;   // desde qué distancia vertical hacia abajo una nube "llega" a la tormenta
+  const filasCercanas = J.filas.filter(f => f.y <= yT && f.y >= yT - alcance).concat([filaArriba]);
   for (let intento = 0; intento < 14; intento++) {
     const x = azar(-CFG.ANCHO_MUNDO / 2, CFG.ANCHO_MUNDO / 2);
     let libre = true;
     for (let k = 0; k <= 8 && libre; k++) if (distX(x, a + d * k / 8) < seg) libre = false;   // muestreo del camino a→b
     if (!libre) continue;
-    if (filaAbajo.xs.concat(filaArriba.xs).some(px => distX(x, px) < seg)) continue;
-    activarTormenta(x, yT);
+    if (filasCercanas.some(f => f.xs.some(px => distX(x, px) < seg))) continue;
+    activarTormenta(x, yT, Math.random() < probEspacio);
     return true;
   }
   return false;

@@ -33,9 +33,10 @@ function pasoFisica(dt) {
       }
     }
     // Tormentas: colisión círculo-círculo (con wrap-around en X)
-    const cy = J.py + CFG.ALTO_MIGUE * 0.5, r = CFG.RADIO_TORMENTA + CFG.RADIO_MIGUE;
+    const cy = J.py + CFG.ALTO_MIGUE * 0.5;
     for (const t of tormentas) {
       if (!t.activa) continue;
+      const r = (t.esAgujero ? CFG.RADIO_AGUJERO : CFG.RADIO_TORMENTA) + CFG.RADIO_MIGUE;
       const dx = envolverX(J.px - t.x), dy = cy - t.y;
       if (dx * dx + dy * dy < r * r) { golpear(t); break; }
     }

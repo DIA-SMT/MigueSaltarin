@@ -39,20 +39,28 @@ const CFG = {
   ALT_TORMENTAS_M: 800,           // desde esta altura (m) aparecen tormentas
   PROB_TORMENTA_INICIAL: 0.25,    // probabilidad de tormenta entre dos filas al pasar esa altura...
   PROB_TORMENTA_FINAL: 0.65,      // ...y al llegar a la meta
-  RADIO_TORMENTA: 0.9,            // radio de colisión
+  RADIO_TORMENTA: 0.9,            // radio de colisión de la tormenta
+  RADIO_AGUJERO: 0.75,            // radio de colisión del agujero negro (es más chico a la vista)
   SEG_TORMENTA: 2.7,              // distancia horizontal mínima entre la tormenta y el camino seguro / las nubes cercanas
 
+  // --- Espacio: a partir de acá las nubes son rocas espaciales y las tormentas, agujeros negros ---
+  ALT_ESPACIO_M: 2200,            // altura (m) a la que el cambio ya es total
+  TRANSICION_ESPACIO_M: 400,      // metros previos en los que ambos tipos se mezclan (transición gradual)
+
   // --- Capas del cielo (la altura es el score). Colores del degradado arriba/abajo -
+  // La progresión está comprimida a propósito: siempre hay algo cambiando mientras se sube.
   CAPAS: [
     { m: 0,    arriba: '#2f8fe8', abajo: '#bde8ff' },   // cielo celeste, ciudad abajo
-    { m: 1000, arriba: '#082566', abajo: '#3d84d4' },   // azul profundo, cirros
-    { m: 2500, arriba: '#0a0520', abajo: '#3b1e68' },   // estratósfera violeta, empiezan estrellas
+    { m: 700,  arriba: '#0c3a8f', abajo: '#5a9be0' },   // azul profundo, cirros
+    { m: 1200, arriba: '#1a0f45', abajo: '#2f5fb0' },   // empieza la estratósfera: violeta arriba, primeras estrellas
+    { m: 2000, arriba: '#07031c', abajo: '#3a1e68' },   // estratósfera alta: casi negro, la Tierra se insinúa abajo
+    { m: 3000, arriba: '#000002', abajo: '#120a2a' },   // borde del espacio
     { m: 4000, arriba: '#000002', abajo: '#04020d' },   // ESPACIO
   ],
   ALT_META_M: 4000,               // al llegar acá se gana
-  ESTRELLAS_DESDE_M: 2100, ESTRELLAS_HASTA_M: 3400,    // rampa de aparición de estrellas
-  TIERRA_DESDE_M: 2900,  TIERRA_HASTA_M: 3800,         // rampa de aparición de la Tierra
-  CIRROS_DESDE_M: 700,  CIRROS_HASTA_M: 3000,          // ventana en la que se ven cirros
+  ESTRELLAS_DESDE_M: 1100, ESTRELLAS_HASTA_M: 2200,    // rampa de aparición de estrellas
+  TIERRA_DESDE_M: 1800,  TIERRA_HASTA_M: 3000,         // rampa de aparición de la Tierra
+  CIRROS_DESDE_M: 500,  CIRROS_HASTA_M: 1700,          // ventana en la que se ven cirros
 
   // --- Cámara ---------------------------------------------------------------------
   FOV: 50,

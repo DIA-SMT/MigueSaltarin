@@ -21,17 +21,29 @@ const dificultad = m => clamp01(m / CFG.ALT_META_M);   // 0 al empezar, 1 en la 
 const rampa = (m, desde, ini, fin) => m < desde ? 0 : lerp(ini, fin, clamp01((m - desde) / Math.max(1, CFG.ALT_META_M - desde)));
 
 // ---- Uso de los pools ----------------------------------------------------------------------------
-function activarNube(x, y, ancho, vx) {
+// Plataforma: nube (o roca espacial si esRoca). "y" es la superficie donde se pisa; el mesh queda debajo.
+function activarNube(x, y, ancho, vx, esRoca) {
   const n = nubes.find(n => !n.activa); if (!n) return null;
-  n.activa = true; n.x = x; n.y = y; n.mitad = ancho / 2; n.vx = vx; n.rebote = 0;
+  n.activa = true; n.x = x; n.y = y; n.mitad = ancho / 2; n.vx = vx; n.rebote = 0; n.esRoca = !!esRoca;
+  if (n.esRoca) {
+    n.mesh.geometry = geoRocas[(nubes.indexOf(n) + Math.floor(Math.abs(y))) % geoRocas.length];
+    n.mesh.material = matRoca; n.escalaY = 0.55;
+    n.mesh.scale.set(ancho / ANCHO_GEO_ROCA, n.escalaY, 0.8);
+    n.mesh.position.set(x, y - 0.62, 0);
+  } else {
+    n.mesh.geometry = geoNube; n.mesh.material = matNube; n.escalaY = 0.75;
+    n.mesh.scale.set(ancho / ANCHO_GEO_NUBE, n.escalaY, 0.8);
+    n.mesh.position.set(x, y - 0.45, 0);
+  }
   n.mesh.visible = true;
-  n.mesh.scale.set(ancho / ANCHO_GEO_NUBE, 0.75, 0.8);
-  n.mesh.position.set(x, y - 0.45, 0);   // "y" es la superficie donde se pisa; la nube queda debajo
   return n;
 }
-function activarTormenta(x, y) {
+// Obstáculo: tormenta (o agujero negro si esAgujero). Misma colisión en ambos casos.
+function activarTormenta(x, y, esAgujero) {
   const t = tormentas.find(t => !t.activa); if (!t) return null;
-  t.activa = true; t.x = x; t.y = y; t.grupo.visible = true; t.grupo.position.set(x, y, 0);
+  t.activa = true; t.x = x; t.y = y; t.esAgujero = !!esAgujero;
+  t.nube.visible = t.rayo.visible = !t.esAgujero; t.agujero.visible = t.esAgujero;
+  t.grupo.visible = true; t.grupo.position.set(x, y, 0);
   return t;
 }
 function desactivarTodo() {

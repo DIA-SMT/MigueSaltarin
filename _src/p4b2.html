@@ -42,11 +42,13 @@ function actualizarVisual(dt, ahora) {
     pivote.rotation.y = lerp(pivote.rotation.y, CFG.MIGUE_ROT_Y + clamp(J.vx * 0.09, -0.7, 0.7), k);
   }
 
-  // Nubes: rebotan un poquito al pisarlas. Tormentas: el rayo parpadea y la nube flota.
-  for (const n of nubes) if (n.activa && n.rebote > 0) { n.rebote = Math.max(0, n.rebote - dt * 4); n.mesh.scale.y = 0.75 * (1 - 0.35 * n.rebote); }
+  // Plataformas: se hunden un poquito al pisarlas (las rocas casi nada). Obstáculos: el rayo parpadea
+  // o el disco del agujero negro gira; ambos flotan.
+  for (const n of nubes) if (n.activa && n.rebote > 0) { n.rebote = Math.max(0, n.rebote - dt * 4); n.mesh.scale.y = n.escalaY * (1 - (n.esRoca ? 0.1 : 0.35) * n.rebote); }
   for (const t of tormentas) if (t.activa) {
     t.t += dt;
-    t.rayo.visible = (Math.sin(t.t * 9) + Math.sin(t.t * 23)) > -0.6;
+    if (t.esAgujero) { t.arco.rotation.z += dt * 1.8; t.agujero.rotation.y = Math.sin(t.t * 0.7) * 0.3; }
+    else t.rayo.visible = (Math.sin(t.t * 9) + Math.sin(t.t * 23)) > -0.6;
     t.grupo.position.y = t.y + Math.sin(t.t * 2) * 0.06;
   }
 

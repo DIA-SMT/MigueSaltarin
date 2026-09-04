@@ -2,6 +2,17 @@
 const matNube     = new THREE.MeshLambertMaterial({ color: colorLineal('#ffffff') });
 const matTormenta = new THREE.MeshLambertMaterial({ color: colorLineal('#3a3e4b') });
 const matRayo     = new THREE.MeshBasicMaterial({ color: colorLineal('#ffe94a') });
+const matRoca     = new THREE.MeshLambertMaterial({ color: colorLineal('#9a8f84') });
+// Agujero negro: esfera negra + disco de acreción (anillo) + arco brillante que gira, todo inclinado
+const geoEsferaNegra = new THREE.SphereGeometry(0.5, 20, 14);
+const geoDisco = new THREE.RingGeometry(0.62, 1.05, 40, 1);
+const geoArco  = new THREE.RingGeometry(0.72, 1.15, 40, 1, 0, 4.4);
+const matNegro = new THREE.MeshBasicMaterial({ color: 0x000000 });
+const geoAnillo = new THREE.RingGeometry(0.5, 0.58, 40, 1);   // "anillo de fotones": borde brillante del agujero
+// Sin depthWrite y con renderOrder para que disco y arco (coplanares) no hagan z-fighting entre sí
+const matDisco  = new THREE.MeshBasicMaterial({ color: colorLineal('#ff9a3c'), transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false });
+const matArco   = new THREE.MeshBasicMaterial({ color: colorLineal('#fff1c9'), transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false });
+const matAnillo = new THREE.MeshBasicMaterial({ color: colorLineal('#ffd9a0'), transparent: true, opacity: 0.95, depthWrite: false });
 const matCirros   = new THREE.MeshLambertMaterial({ color: colorLineal('#dfe9ff'), transparent: true, opacity: 0, depthWrite: false });
 
 // ---- Pool de nubes (plataformas): se reciclan, nunca se crean durante el juego ----------
@@ -11,14 +22,21 @@ for (let i = 0; i < CFG.POOL_NUBES; i++) {
   mesh.visible = false; escena.add(mesh);
   nubes.push({ mesh, activa: false, x: 0, y: 0, mitad: 1, vx: 0, rebote: 0 });
 }
-// ---- Pool de tormentas: nube gris oscura + rayo ---------------------------------------------
+// ---- Pool de obstáculos: tormenta (nube gris oscura + rayo) o agujero negro, según la altura ------
 const tormentas = [];
 for (let i = 0; i < CFG.POOL_TORMENTAS; i++) {
   const grupo = new THREE.Group();
   const nube = new THREE.Mesh(geoNube, matTormenta); nube.scale.set(0.62, 0.55, 0.62);
   const rayo = new THREE.Mesh(geoRayo, matRayo); rayo.position.set(0, -0.25, 0.4); rayo.scale.set(1.15, 1.15, 1);
-  grupo.add(nube, rayo); grupo.visible = false; escena.add(grupo);
-  tormentas.push({ grupo, rayo, activa: false, x: 0, y: 0, t: Math.random() * 10 });
+  const agujero = new THREE.Group();
+  const disco = new THREE.Mesh(geoDisco, matDisco); disco.rotation.x = -1.3; disco.renderOrder = 1;   // casi de canto: elipse fina
+  const arco = new THREE.Mesh(geoArco, matArco); arco.rotation.x = -1.3; arco.renderOrder = 2;
+  const anillo = new THREE.Mesh(geoAnillo, matAnillo); anillo.renderOrder = 3;                          // de frente a la cámara
+  agujero.add(new THREE.Mesh(geoEsferaNegra, matNegro), disco, arco, anillo);
+  agujero.rotation.z = 0.3;   // disco ladeado
+  agujero.visible = false;
+  grupo.add(nube, rayo, agujero); grupo.visible = false; escena.add(grupo);
+  tormentas.push({ grupo, nube, rayo, agujero, arco, esAgujero: false, activa: false, x: 0, y: 0, t: Math.random() * 10 });
 }
 
 // ---- Decorado: ciudad (queda abajo, se ve al empezar y desaparece al subir) ------------------
