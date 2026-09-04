@@ -24,6 +24,10 @@ window.addEventListener('keydown', e => {
   const izq = esIzq(e), der = esDer(e);
   if (!izq && !der) return;          // cualquier otra tecla se ignora
   e.preventDefault();
+  // Toque nuevo (no auto-repetición ni tecla ya apretada): impulso lateral inmediato. Así un clic corto
+  // del puntero del stand mueve a Migue de verdad, aunque el keyup llegue enseguida.
+  const nuevo = (izq && !J.entrada.izq) || (der && !J.entrada.der);
+  if (nuevo && J.estado === 'jugando') J.vx = clamp(J.vx + (der ? 1 : -1) * CFG.IMPULSO_TOQUE, -CFG.VEL_MAX_X, CFG.VEL_MAX_X);
   if (izq) J.entrada.izq = true;
   if (der) J.entrada.der = true;
   if (!e.repeat) accion();

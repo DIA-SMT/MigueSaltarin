@@ -13,7 +13,9 @@ const CFG = {
   FUERZA_SALTO: 16,               // velocidad vertical al rebotar. Altura del salto = F²/(2·|g|) ≈ 3.76 u
   VEL_MAX_X: 9,                   // velocidad horizontal máxima
   ACEL_X: 60,                     // aceleración al mantener una flecha
-  ROCE_X: 6,                      // frenado/inercia al soltar (más alto = frena antes)
+  IMPULSO_TOQUE: 7.5,             // velocidad que gana al instante con cada toque nuevo (pensado para punteros de
+                                  // clic corto: un toque ≈ IMPULSO_TOQUE / ROCE_X unidades de desplazamiento)
+  ROCE_X: 4.5,                    // frenado/inercia al soltar (más alto = frena antes y cada toque mueve menos)
   ALTO_MIGUE: 1.7,                // altura visual del personaje (el modelo se escala a esto)
   RADIO_MIGUE: 0.45,              // radio de colisión contra tormentas
   MIGUE_ROT_Y: 0,                 // giro extra del modelo (radianes) si carga mirando para otro lado
