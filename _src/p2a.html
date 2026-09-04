@@ -1,0 +1,105 @@
+'use strict';
+
+/* =============================================================================
+   2) CONSTANTES DE GAMEPLAY — todo lo ajustable está acá
+   ============================================================================= */
+const CFG = {
+  // --- Escala del mundo ---------------------------------------------------------
+  METROS_POR_UNIDAD: 18,          // 1 unidad 3D = 18 m de "altura" en el HUD. Con esto, llegar
+                                  // a 4000 m lleva ~90 s sin caerse (partidas cortas para el stand).
+
+  // --- Física de Migue ------------------------------------------------------------
+  GRAVEDAD: -34,                  // unidades/s² (negativa = hacia abajo)
+  FUERZA_SALTO: 16,               // velocidad vertical al rebotar. Altura del salto = F²/(2·|g|) ≈ 3.76 u
+  VEL_MAX_X: 9,                   // velocidad horizontal máxima
+  ACEL_X: 60,                     // aceleración al mantener una flecha
+  ROCE_X: 6,                      // frenado/inercia al soltar (más alto = frena antes)
+  ALTO_MIGUE: 1.7,                // altura visual del personaje (el modelo se escala a esto)
+  RADIO_MIGUE: 0.45,              // radio de colisión contra tormentas
+  MIGUE_ROT_Y: 0,                 // giro extra del modelo (radianes) si carga mirando para otro lado
+
+  // --- Mundo ----------------------------------------------------------------------
+  ANCHO_MUNDO: 16,                // Migue va de -8 a 8; si sale por un lado aparece por el otro
+
+  // --- Nubes (plataformas) --------------------------------------------------------
+  SEP_NUBES_INICIAL: [2.0, 2.6],  // separación vertical [mín, máx] entre filas al empezar
+  SEP_NUBES_FINAL:   [2.8, 3.3],  // idem a la altura máxima. ¡Siempre menor a la altura del salto (3.76)!
+  DX_MAX_FILA: 6,                 // corrimiento horizontal máximo entre la nube principal de una fila y la
+                                  // siguiente (en un salto Migue recorre hasta ~8.5 u, así que siempre llega)
+  ANCHO_NUBE_INICIAL: 2.7,
+  ANCHO_NUBE_FINAL: 2.0,
+  PROB_SEGUNDA_NUBE_INICIAL: 0.85,// probabilidad de que una fila tenga una segunda nube (más fácil)
+  PROB_SEGUNDA_NUBE_FINAL: 0.15,
+  ALT_NUBES_MOVILES_M: 500,       // desde esta altura (m) aparecen nubes que se mueven de lado a lado
+  PROB_NUBE_MOVIL_INICIAL: 0.25,  // probabilidad de nube móvil justo al pasar esa altura...
+  PROB_NUBE_MOVIL_FINAL: 0.65,    // ...y al llegar a la meta
+  VEL_NUBE_MOVIL: [1.2, 3.0],     // rango de velocidad de las nubes móviles
+
+  // --- Tormentas (obstáculos) -----------------------------------------------------
+  ALT_TORMENTAS_M: 800,           // desde esta altura (m) aparecen tormentas
+  PROB_TORMENTA_INICIAL: 0.25,    // probabilidad de tormenta entre dos filas al pasar esa altura...
+  PROB_TORMENTA_FINAL: 0.65,      // ...y al llegar a la meta
+  RADIO_TORMENTA: 0.9,            // radio de colisión
+  SEG_TORMENTA: 2.7,              // distancia horizontal mínima entre la tormenta y el camino seguro / las nubes cercanas
+
+  // --- Capas del cielo (la altura es el score). Colores del degradado arriba/abajo -
+  CAPAS: [
+    { m: 0,    arriba: '#2f8fe8', abajo: '#bde8ff' },   // cielo celeste, ciudad abajo
+    { m: 1000, arriba: '#082566', abajo: '#3d84d4' },   // azul profundo, cirros
+    { m: 2500, arriba: '#0a0520', abajo: '#3b1e68' },   // estratósfera violeta, empiezan estrellas
+    { m: 4000, arriba: '#000002', abajo: '#04020d' },   // ESPACIO
+  ],
+  ALT_META_M: 4000,               // al llegar acá se gana
+  ESTRELLAS_DESDE_M: 2100, ESTRELLAS_HASTA_M: 3400,    // rampa de aparición de estrellas
+  TIERRA_DESDE_M: 2900,  TIERRA_HASTA_M: 3800,         // rampa de aparición de la Tierra
+  NUBES_DECOR_HASTA_M: 1500,      // las nubes de fondo desaparecen antes de esta altura
+  CIRROS_DESDE_M: 700,  CIRROS_HASTA_M: 3000,          // ventana en la que se ven cirros
+
+  // --- Cámara ---------------------------------------------------------------------
+  FOV: 50,
+  CAM_DIST_MIN: 10.5,             // distancia de la cámara (se aleja sola si la pantalla es angosta)
+  CAM_OFFSET_Y: 1.6,              // cuánto por debajo del centro de pantalla queda Migue
+  MARGEN_MUERTE: 1.2,             // cuánto por debajo del borde inferior hay que caer para perder
+
+  // --- Audio ----------------------------------------------------------------------
+  MUSICA: true,
+  ARCHIVO_MUSICA: 'assets/cancion.mp3',  // poné acá tu copia de la canción. Si no existe, suena
+                                         // un riff de rock propio generado con WebAudio.
+  VOLUMEN_MUSICA: 0.55,
+  VOLUMEN_EFECTOS: 0.5,
+
+  // --- Rendimiento ----------------------------------------------------------------
+  POOL_NUBES: 24,                 // nubes reutilizadas (nunca se crean nuevas durante el juego)
+  POOL_TORMENTAS: 10,
+  PIXEL_RATIO_MAX: 1.5,           // limita la resolución en pantallas de alta densidad
+  PASO_FISICA: 1 / 120,           // la física corre a paso fijo (independiente de los fps)
+  BLOQUEO_REINICIO_MS: 450,       // pausa mínima antes de poder reintentar (evita reinicios accidentales)
+};
+
+/* =============================================================================
+   3) UTILIDADES
+   ============================================================================= */
+const clamp   = (v, a, b) => Math.max(a, Math.min(b, v));
+const clamp01 = v => clamp(v, 0, 1);
+const lerp    = (a, b, t) => a + (b - a) * t;
+const azar    = (a, b) => a + Math.random() * (b - a);
+const signo   = () => (Math.random() < 0.5 ? -1 : 1);
+const $       = id => document.getElementById(id);
+
+// Coordenada X "envuelta": si te pasás de un borde aparecés por el otro
+function envolverX(x) {
+  const w = CFG.ANCHO_MUNDO;
+  let v = (x + w / 2) % w;
+  if (v < 0) v += w;
+  return v - w / 2;
+}
+// Distancia horizontal más corta entre dos X, considerando el wrap-around
+const distX = (a, b) => Math.abs(envolverX(a - b));
+
+const metros = y => y * CFG.METROS_POR_UNIDAD;            // unidades 3D -> metros de altura
+const formatoMetros = m => Math.max(0, Math.floor(m)).toLocaleString('es-AR') + ' m';
+function formatoTiempo(seg) {
+  const mm = Math.floor(seg / 60), ss = Math.floor(seg % 60);
+  return mm + ':' + String(ss).padStart(2, '0');
+}
+

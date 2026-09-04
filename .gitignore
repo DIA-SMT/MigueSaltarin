@@ -1,0 +1,7 @@
+# Dependencias de las herramientas de construcción (npm i dentro de _src)
+_src/node_modules/
+# Modelo original de Meshy (52 MB): está en el ZIP original, no hace falta versionarlo
+_src/base_basic_*.glb
+# Configuración local del editor / respaldos
+.claude/
+*.bak

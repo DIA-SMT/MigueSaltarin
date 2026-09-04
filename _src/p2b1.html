@@ -1,0 +1,76 @@
+/* =============================================================================
+   3b) AUDIO — música (archivo o riff generado) y efectos, todo con WebAudio
+   ============================================================================= */
+const Sonido = (() => {
+  let ctx = null, master = null, musicaGain = null, elemento = null;
+  let iniciado = false, riffActivo = false, bufRuido = null;
+  let guitarraBus = null, bateriaBus = null, proximoTiempo = 0, paso = 0;
+
+  function asegurarCtx() {
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      ctx = new AC();
+      master = ctx.createGain(); master.gain.value = 1; master.connect(ctx.destination);
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+
+  // Se llama desde el primer keydown (gesto del usuario: habilita el audio en el navegador)
+  function iniciar() {
+    if (iniciado) return;
+    iniciado = true;
+    if (!asegurarCtx() || !CFG.MUSICA) return;
+
+    // 1) Intento con el archivo de música del stand
+    let resuelto = false;
+    const fallar = () => { if (!resuelto) { resuelto = true; elemento = null; iniciarRiff(); } };
+    elemento = new Audio();
+    elemento.loop = true;
+    elemento.volume = CFG.VOLUMEN_MUSICA;
+    elemento.preload = 'auto';
+    elemento.addEventListener('error', fallar);
+    elemento.addEventListener('playing', () => {
+      if (!resuelto) { resuelto = true; $('musica').textContent = '\u266A ' + CFG.ARCHIVO_MUSICA; }
+    });
+    elemento.src = CFG.ARCHIVO_MUSICA;
+    elemento.play().catch(fallar);
+    // 2) Si en 4 s no arrancó nada (ni sonó ni falló), usamos el riff generado
+    setTimeout(() => { if (!resuelto) fallar(); }, 4000);
+  }
+
+  // ---- Riff de rock propio (fallback si no hay mp3) -------------------------------
+  const BPM = 138, PASO_S = 60 / BPM / 4, PASOS = 32;   // patrón de 2 compases en semicorcheas
+  // [paso, semitonos desde La2, duración en pasos] — acordes de quinta ("power chords")
+  const RIFF_A = [[0,0,2],[2,0,1],[4,0,2],[6,3,2],[8,5,2],[10,5,1],[12,3,2],[14,0,2],
+                  [16,0,2],[18,0,1],[20,0,2],[22,-2,2],[24,0,2],[26,0,1],[28,7,2],[30,5,2]];
+  const RIFF_B = [[0,5,2],[2,5,1],[4,5,2],[6,8,2],[8,7,2],[10,7,1],[12,10,2],[14,7,2],
+                  [16,5,2],[18,5,1],[20,3,2],[22,3,1],[24,0,2],[26,0,1],[28,-2,2],[30,-2,2]];
+  const BOMBO = [0, 6, 8, 16, 22, 24], REDOBLANTE = [4, 12, 20, 28];
+
+  function curvaDistorsion(k) {
+    const n = 1024, c = new Float32Array(n);
+    for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; c[i] = ((Math.PI + k) * x) / (Math.PI + k * Math.abs(x)); }
+    return c;
+  }
+  function ruidoBlanco() {
+    if (bufRuido) return bufRuido;
+    bufRuido = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    const d = bufRuido.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    return bufRuido;
+  }
+  function iniciarRiff() {
+    if (riffActivo || !ctx) return;
+    riffActivo = true;
+    $('musica').textContent = '\u266A riff generado \u2014 pon\u00E9 tu mp3 en ' + CFG.ARCHIVO_MUSICA;
+    musicaGain = ctx.createGain(); musicaGain.gain.value = CFG.VOLUMEN_MUSICA * 0.55; musicaGain.connect(master);
+    const dist = ctx.createWaveShaper(); dist.curve = curvaDistorsion(70); dist.oversample = '2x';
+    const filtro = ctx.createBiquadFilter(); filtro.type = 'lowpass'; filtro.frequency.value = 2400; filtro.Q.value = 0.8;
+    dist.connect(filtro).connect(musicaGain);
+    guitarraBus = dist;
+    bateriaBus = ctx.createGain(); bateriaBus.gain.value = 0.9; bateriaBus.connect(musicaGain);
+    proximoTiempo = ctx.currentTime + 0.1; paso = 0;
+    setInterval(programar, 40);
+  }

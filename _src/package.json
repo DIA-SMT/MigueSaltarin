@@ -1,0 +1,13 @@
+{
+  "name": "migue-saltarin-herramientas",
+  "private": true,
+  "description": "Herramientas de construcción de Migue Saltarín: ensamblado del HTML y optimización del modelo",
+  "scripts": {
+    "construir": "node inyectar.mjs",
+    "decimar": "node decimar.mjs 25000 1024 ../migue.glb",
+    "servir": "node servidor.mjs 8765"
+  },
+  "devDependencies": {
+    "@gltf-transform/cli": "^4.5.0"
+  }
+}

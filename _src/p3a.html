@@ -1,0 +1,75 @@
+/* =============================================================================
+   4) ESCENA 3D
+   ============================================================================= */
+function iniciarJuego() {
+
+// ---- Renderer -----------------------------------------------------------------
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, CFG.PIXEL_RATIO_MAX));
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.autoClear = false;   // limpiamos a mano porque dibujamos dos escenas (fondo + juego)
+document.body.appendChild(renderer.domElement);
+
+const escena = new THREE.Scene();
+const camara = new THREE.PerspectiveCamera(CFG.FOV, 1, 0.1, 400);
+let camDist = CFG.CAM_DIST_MIN;   // distancia de la cámara al plano de juego (z = 0)
+let altoVisible = 10;             // alto visible (unidades) en el plano de juego; se recalcula al redimensionar
+
+// Los colores hex se escriben "como se ven"; el renderer saca sRGB, así que los materiales
+// necesitan el color en lineal.
+const colorLineal = hex => new THREE.Color(hex).convertSRGBToLinear();
+
+// ---- Fondo: degradado vertical (un solo quad en una escena aparte, sin profundidad) -----
+const escenaFondo = new THREE.Scene();
+const camFondo = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const matFondo = new THREE.ShaderMaterial({
+  uniforms: { arriba: { value: new THREE.Color(CFG.CAPAS[0].arriba) }, abajo: { value: new THREE.Color(CFG.CAPAS[0].abajo) } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+  fragmentShader: 'uniform vec3 arriba; uniform vec3 abajo; varying vec2 vUv; void main(){ gl_FragColor = vec4(mix(abajo, arriba, vUv.y), 1.0); }',
+  depthWrite: false, depthTest: false,
+});
+escenaFondo.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), matFondo));
+const coloresArriba = CFG.CAPAS.map(c => new THREE.Color(c.arriba));
+const coloresAbajo  = CFG.CAPAS.map(c => new THREE.Color(c.abajo));
+
+// ---- Luces: solo dos, sin sombras ------------------------------------------------
+const luzHemi = new THREE.HemisphereLight(0xffffff, 0x8090b0, 0.95);
+const luzSol = new THREE.DirectionalLight(0xffffff, 0.85);
+luzSol.position.set(5, 9, 7);
+escena.add(luzHemi, luzSol);
+const sueloClaro = new THREE.Color(0x8090b0), sueloOscuro = new THREE.Color(0x202838);
+
+// ---- Geometrías: fusionamos varias formas en UNA sola geometría (1 draw call por objeto) ---
+function fusionar(partes) {   // partes: [{ geo, m: Matrix4 }]
+  const geos = partes.map(({ geo, m }) => { const g = geo.index ? geo.toNonIndexed() : geo.clone(); g.applyMatrix4(m); return g; });
+  let n = 0; geos.forEach(g => n += g.attributes.position.count);
+  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3);
+  let o = 0;
+  for (const g of geos) {
+    pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3);
+    o += g.attributes.position.count; g.dispose();
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  return out;
+}
+const matriz = (x, y, z, sx, sy, sz) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion(), new THREE.Vector3(sx, sy, sz));
+
+// Nube = 5 bolas achatadas (icosaedros de 80 triángulos) fusionadas. Ancho ≈ 3.3 unidades.
+const ANCHO_GEO_NUBE = 3.3;
+function crearGeoNube() {
+  const base = new THREE.IcosahedronGeometry(1, 1);
+  const bolas = [[0, 0, 0, 1.0], [-0.9, -0.1, 0.1, 0.72], [0.9, -0.1, -0.1, 0.78], [-0.45, 0.35, -0.2, 0.6], [0.45, 0.4, 0.2, 0.66]];
+  return fusionar(bolas.map(([x, y, z, s]) => ({ geo: base, m: matriz(x, y, z, s, s * 0.62, s * 0.85) })));
+}
+// Rayo = forma plana en zigzag
+function crearGeoRayo() {
+  const s = new THREE.Shape();
+  s.moveTo(0.15, 0); s.lineTo(-0.18, -0.55); s.lineTo(0.06, -0.55); s.lineTo(-0.22, -1.2);
+  s.lineTo(0.38, -0.42); s.lineTo(0.1, -0.42); s.lineTo(0.34, 0);
+  return new THREE.ShapeGeometry(s);
+}
+const geoNube = crearGeoNube();
+const geoRayo = crearGeoRayo();
+

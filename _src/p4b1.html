@@ -1,0 +1,82 @@
+// ---- Física (paso fijo) ------------------------------------------------------------------------------
+function pasoFisica(dt) {
+  // Horizontal: aceleración con las flechas + inercia. Tras chocar con una tormenta ya no responde.
+  const dir = J.estado === 'jugando' ? (J.entrada.der ? 1 : 0) - (J.entrada.izq ? 1 : 0) : 0;
+  J.vx += dir * CFG.ACEL_X * dt;
+  J.vx -= J.vx * CFG.ROCE_X * dt;
+  J.vx = clamp(J.vx, -CFG.VEL_MAX_X, CFG.VEL_MAX_X);
+  J.px = envolverX(J.px + J.vx * dt);   // wrap-around en los bordes
+
+  // Vertical
+  const yAnt = J.py;
+  if (J.estado === 'victoria') J.vy = lerp(J.vy, 2.5, 2 * dt);          // al ganar, flota despacio hacia arriba
+  else J.vy = Math.max(J.vy + CFG.GRAVEDAD * dt, -45);
+  J.py += J.vy * dt;
+
+  // Nubes móviles: van y vienen entre los bordes
+  for (const n of nubes) {
+    if (!n.activa || n.vx === 0) continue;
+    n.x += n.vx * dt;
+    const lim = CFG.ANCHO_MUNDO / 2 - n.mitad;
+    if (n.x > lim) { n.x = lim; n.vx = -Math.abs(n.vx); } else if (n.x < -lim) { n.x = -lim; n.vx = Math.abs(n.vx); }
+    n.mesh.position.x = n.x;
+  }
+
+  if (J.estado === 'jugando') {
+    // Aterrizaje: solo cayendo, y solo si los pies cruzaron la superficie de la nube de arriba hacia abajo
+    if (J.vy < 0) for (const n of nubes) {
+      if (!n.activa || yAnt < n.y || J.py > n.y) continue;
+      if (distX(J.px, n.x) <= n.mitad + CFG.RADIO_MIGUE * 0.5) {
+        J.py = n.y; J.vy = CFG.FUERZA_SALTO; J.squash = 1; n.rebote = 1;
+        Sonido.rebote();
+        break;
+      }
+    }
+    // Tormentas: colisión círculo-círculo (con wrap-around en X)
+    const cy = J.py + CFG.ALTO_MIGUE * 0.5, r = CFG.RADIO_TORMENTA + CFG.RADIO_MIGUE;
+    for (const t of tormentas) {
+      if (!t.activa) continue;
+      const dx = envolverX(J.px - t.x), dy = cy - t.y;
+      if (dx * dx + dy * dy < r * r) { golpear(t); break; }
+    }
+  }
+  if (J.estado === 'jugando' || J.estado === 'victoria') {
+    J.camObjetivo = Math.max(J.camObjetivo, J.py + CFG.CAM_OFFSET_Y);   // la cámara nunca baja
+    const m = metros(J.py);
+    if (m > J.alturaMaxM) J.alturaMaxM = m;
+    if (J.estado === 'jugando' && m >= CFG.ALT_META_M) ganar();
+  }
+  // Derrota: cayó por debajo del borde inferior de la pantalla
+  if ((J.estado === 'jugando' || J.estado === 'cayendo') && J.py < J.camY - altoVisible / 2 - CFG.MARGEN_MUERTE) perder();
+}
+
+function golpear(t) {   // tocó una tormenta: cae sin control y pierde
+  J.estado = 'cayendo';
+  J.vy = 3;
+  J.vx = (envolverX(J.px - t.x) >= 0 ? 1 : -1) * 4;
+  J.sacudida = 0.5; J.flash = 1;
+  Sonido.golpe();
+}
+function perder() {
+  J.estado = 'derrota';
+  if (J.alturaMaxM > J.recordM) J.recordM = J.alturaMaxM;
+  $('derrotaAltura').textContent = formatoMetros(J.alturaMaxM);
+  $('derrotaRecord').textContent = formatoMetros(J.recordM);
+  ui.record.textContent = 'R\u00E9cord: ' + formatoMetros(J.recordM);
+  mostrarPantalla('derrota');
+  J.bloqueoHasta = performance.now() + CFG.BLOQUEO_REINICIO_MS;
+  Sonido.caida(); Sonido.duckear(0.35);
+}
+function ganar() {
+  J.estado = 'victoria';
+  J.tFin = performance.now();
+  J.alturaMaxM = Math.max(J.alturaMaxM, CFG.ALT_META_M);
+  if (J.alturaMaxM > J.recordM) J.recordM = J.alturaMaxM;
+  $('victoriaAltura').textContent = formatoMetros(J.alturaMaxM);
+  $('victoriaTiempo').textContent = formatoTiempo((J.tFin - J.tInicio) / 1000);
+  ui.record.textContent = 'R\u00E9cord: ' + formatoMetros(J.recordM);
+  mostrarPantalla('victoria');
+  J.bloqueoHasta = performance.now() + CFG.BLOQUEO_REINICIO_MS * 2;
+  Sonido.victoria(); Sonido.duckear(0.5);
+}
+

@@ -1,0 +1,44 @@
+// ---- Materiales compartidos (Lambert: el más barato con iluminación) ------------------
+const matNube     = new THREE.MeshLambertMaterial({ color: colorLineal('#ffffff') });
+const matTormenta = new THREE.MeshLambertMaterial({ color: colorLineal('#3a3e4b') });
+const matRayo     = new THREE.MeshBasicMaterial({ color: colorLineal('#ffe94a') });
+const matDecor    = new THREE.MeshLambertMaterial({ color: colorLineal('#ffffff'), transparent: true, opacity: 0.9, depthWrite: false });
+const matCirros   = new THREE.MeshLambertMaterial({ color: colorLineal('#dfe9ff'), transparent: true, opacity: 0, depthWrite: false });
+
+// ---- Pool de nubes (plataformas): se reciclan, nunca se crean durante el juego ----------
+const nubes = [];
+for (let i = 0; i < CFG.POOL_NUBES; i++) {
+  const mesh = new THREE.Mesh(geoNube, matNube);
+  mesh.visible = false; escena.add(mesh);
+  nubes.push({ mesh, activa: false, x: 0, y: 0, mitad: 1, vx: 0, rebote: 0 });
+}
+// ---- Pool de tormentas: nube gris oscura + rayo ---------------------------------------------
+const tormentas = [];
+for (let i = 0; i < CFG.POOL_TORMENTAS; i++) {
+  const grupo = new THREE.Group();
+  const nube = new THREE.Mesh(geoNube, matTormenta); nube.scale.set(0.62, 0.55, 0.62);
+  const rayo = new THREE.Mesh(geoRayo, matRayo); rayo.position.set(0, -0.25, 0.4); rayo.scale.set(1.15, 1.15, 1);
+  grupo.add(nube, rayo); grupo.visible = false; escena.add(grupo);
+  tormentas.push({ grupo, rayo, activa: false, x: 0, y: 0, t: Math.random() * 10 });
+}
+
+// ---- Decorado: ciudad (queda abajo, se ve al empezar y desaparece al subir) ------------------
+const ALTURA_CIUDAD = -9;
+(function crearCiudad() {
+  const caja = new THREE.BoxGeometry(1, 1, 1), ventana = new THREE.PlaneGeometry(0.22, 0.3);
+  const edificios = [], ventanas = [];
+  for (let i = 0; i < 34; i++) {
+    const w = azar(1.2, 3.2), h = azar(2.5, 9), d = azar(1.2, 3);
+    const x = -26 + i * 1.6 + azar(-0.4, 0.4), z = azar(-9, -3);
+    edificios.push({ geo: caja, m: matriz(x, h / 2, z, w, h, d) });
+    for (let k = 0; k < 6; k++) if (Math.random() < 0.55)   // ventanas encendidas en la cara frontal
+      ventanas.push({ geo: ventana, m: matriz(x + azar(-w / 2 + 0.2, w / 2 - 0.2), azar(0.4, h - 0.4), z + d / 2 + 0.01, 1, 1, 1) });
+  }
+  const ciudad = new THREE.Mesh(fusionar(edificios), new THREE.MeshLambertMaterial({ color: colorLineal('#3a4560') }));
+  const luces  = new THREE.Mesh(fusionar(ventanas), new THREE.MeshBasicMaterial({ color: colorLineal('#ffd76a') }));
+  const suelo  = new THREE.Mesh(new THREE.PlaneGeometry(140, 70), new THREE.MeshLambertMaterial({ color: colorLineal('#2c3a4a') }));
+  suelo.rotation.x = -Math.PI / 2; suelo.position.set(0, -0.02, -12);
+  const grupo = new THREE.Group(); grupo.add(ciudad, luces, suelo); grupo.position.y = ALTURA_CIUDAD;
+  escena.add(grupo);
+})();
+

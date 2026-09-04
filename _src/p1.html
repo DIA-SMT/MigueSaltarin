@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Migue Saltarín — ¡Al espacio!</title>
+<!--
+  ============================================================================
+  MIGUE SALTARÍN — minijuego tipo "Doodle Jump" en Three.js, en un solo archivo.
+  ============================================================================
+  CONTROLES: únicamente flecha IZQUIERDA y flecha DERECHA. Sirven para moverse,
+             para empezar y para reintentar. No se usa ninguna otra tecla ni el mouse.
+  OBJETIVO:  subir saltando de nube en nube hasta llegar al espacio (4000 m).
+
+  Estructura del archivo:
+    1) Estilos y HUD (HTML/CSS)
+    2) CONSTANTES DE GAMEPLAY (objeto CFG) -> todo lo ajustable está ahí
+    3) Utilidades y audio (música + efectos con WebAudio)
+    4) Escena 3D: cámara, luces, fondo, decorado, pools de nubes/tormentas, carga de Migue
+    5) Lógica: generación procedural, física, colisiones, estados, HUD, bucle principal
+    6) Modelo 3D embebido en base64 (al final del archivo)
+
+  Modelo: se intenta cargar "migue.glb" desde la misma carpeta; si falla (por ejemplo al abrir
+  el archivo con doble clic, donde el navegador bloquea fetch), se usa la copia embebida al
+  final del archivo; si tampoco está, se usa un placeholder (cápsula) y el juego funciona igual.
+
+  Three.js: se importa desde CDN. Si no hay conexión, se intenta con ./libs/three.min.js y
+  ./libs/GLTFLoader.js (copias locales opcionales).
+
+  Música: poné tu copia de la canción en assets/cancion.mp3 (ver CFG.ARCHIVO_MUSICA). Si el
+  archivo no existe, suena un riff de rock propio generado con WebAudio para no quedar en silencio.
+-->
+<style>
+  :root {
+    --amarillo: #ffe25a;
+    --rojo: #ff5a5a;
+    --verde: #7dff9a;
+    --sombra: 0 0 6px #000, 0 0 14px #000, 0 4px 0 #000, 0 0 2px #000;
+  }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; background: #000;
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+    user-select: none; -webkit-user-select: none; cursor: none; /* stand: sin mouse */
+  }
+  canvas { display: block; }
+
+  /* ---------- HUD (altura + récord) ---------- */
+  #hud {
+    position: fixed; inset: 0; pointer-events: none;
+    display: flex; flex-direction: column; align-items: center;
+    transition: opacity .3s;
+  }
+  #altura {
+    margin-top: 2vh;
+    font-size: clamp(48px, 10vh, 130px); font-weight: 900; line-height: 1;
+    color: #fff; letter-spacing: .02em; font-variant-numeric: tabular-nums;
+    text-shadow: var(--sombra);
+  }
+  #record {
+    margin-top: .5vh;
+    font-size: clamp(18px, 3.2vh, 40px); font-weight: 800;
+    color: var(--amarillo); text-shadow: 0 0 6px #000, 0 2px 0 #000;
+  }
+
+  /* ---------- Pantallas (inicio / derrota / victoria / carga) ---------- */
+  .pantalla {
+    position: fixed; inset: 0; pointer-events: none;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; color: #fff; padding: 4vh 4vw; box-sizing: border-box;
+    background: rgba(0, 0, 0, .55);
+    opacity: 0; transition: opacity .25s;
+  }
+  .pantalla.visible { opacity: 1; }
+  /* La pantalla de inicio deja ver a Migue en el centro (degradado transparente en el medio) */
+  .pantalla.inicio {
+    justify-content: space-between;
+    background: linear-gradient(rgba(0,0,0,.65) 0%, rgba(0,0,0,0) 32%, rgba(0,0,0,0) 68%, rgba(0,0,0,.7) 100%);
+  }
+  .titulo {
+    font-size: clamp(44px, 11vh, 150px); font-weight: 900; line-height: .95;
+    color: var(--amarillo); letter-spacing: .01em;
+    text-shadow: 0 6px 0 #000, 0 0 26px #000, 0 0 4px #000;
+  }
+  .titulo.rojo  { color: var(--rojo); }
+  .titulo.verde { color: var(--verde); }
+  .sub {
+    margin-top: 2vh; font-size: clamp(20px, 3.6vh, 46px); font-weight: 700;
+    text-shadow: var(--sombra);
+  }
+  .dato {
+    margin-top: 1.5vh; font-size: clamp(24px, 4.5vh, 60px); font-weight: 700;
+    text-shadow: var(--sombra);
+  }
+  .dato b { color: var(--amarillo); font-variant-numeric: tabular-nums; }
+  .prompt {
+    margin-top: 4vh; font-size: clamp(24px, 4.6vh, 62px); font-weight: 900;
+    text-shadow: var(--sombra);
+    animation: parpadeo 1.3s ease-in-out infinite;
+  }
+  .tecla {
+    display: inline-block; min-width: 1.2em; padding: 0 .25em; margin: 0 .1em;
+    border-radius: .18em; background: #fff; color: #000; text-shadow: none;
+    box-shadow: 0 .12em 0 #888, 0 0 8px #000;
+    line-height: 1.25;
+  }
+  @keyframes parpadeo { 50% { opacity: .35; } }
+
+  /* Destello rojo al chocar con una tormenta */
+  #flash {
+    position: fixed; inset: 0; pointer-events: none;
+    background: rgba(255, 40, 40, .55); opacity: 0;
+  }
+  /* Indicador chiquito de música (abajo a la izquierda) */
+  #musica {
+    position: fixed; left: 1.2vw; bottom: 1vh; pointer-events: none;
+    font-size: clamp(11px, 1.6vh, 18px); color: rgba(255,255,255,.55);
+    text-shadow: 0 1px 2px #000;
+  }
+  #error .sub { color: var(--rojo); max-width: 80vw; }
+</style>
+</head>
+<body>
+
+<!-- HUD -->
+<div id="hud">
+  <div id="altura">0 m</div>
+  <div id="record"></div>
+</div>
+
+<!-- Pantallas -->
+<div id="carga" class="pantalla visible">
+  <div class="titulo">MIGUE<br>SALTARÍN</div>
+  <div class="sub">Cargando a Migue…</div>
+</div>
+
+<div id="inicio" class="pantalla inicio">
+  <div>
+    <div class="titulo">MIGUE SALTARÍN</div>
+    <div class="sub">Saltá de nube en nube hasta llegar al espacio</div>
+  </div>
+  <div class="prompt">Presioná <span class="tecla">←</span> o <span class="tecla">→</span> para empezar</div>
+</div>
+
+<div id="derrota" class="pantalla">
+  <div class="titulo rojo">¡CAÍSTE!</div>
+  <div class="dato">Altura alcanzada: <b id="derrotaAltura">0 m</b></div>
+  <div class="dato">Récord de la sesión: <b id="derrotaRecord">0 m</b></div>
+  <div class="prompt">Presioná <span class="tecla">←</span> o <span class="tecla">→</span> para reintentar</div>
+</div>
+
+<div id="victoria" class="pantalla">
+  <div class="titulo verde">¡LLEGASTE<br>AL ESPACIO!</div>
+  <div class="dato">Altura: <b id="victoriaAltura">4.000 m</b></div>
+  <div class="dato">Tiempo: <b id="victoriaTiempo">0:00</b></div>
+  <div class="prompt">Presioná <span class="tecla">←</span> o <span class="tecla">→</span> para jugar de nuevo</div>
+</div>
+
+<div id="error" class="pantalla">
+  <div class="titulo rojo">UY…</div>
+  <div class="sub" id="errorTexto"></div>
+</div>
+
+<div id="flash"></div>
+<div id="musica"></div>
+
+<!-- Three.js desde CDN (build UMD: funciona también abriendo el archivo con doble clic).
+     Si falla, más abajo se intenta con las copias locales de ./libs/ -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/GLTFLoader.js"></script>
+
+<script>

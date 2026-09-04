@@ -1,0 +1,47 @@
+/* =============================================================================
+   5) LÓGICA DEL JUEGO
+   ============================================================================= */
+const ui = { hud: $('hud'), altura: $('altura'), record: $('record'), carga: $('carga'), inicio: $('inicio'), derrota: $('derrota'), victoria: $('victoria'), flash: $('flash') };
+const J = {                        // estado del juego
+  estado: 'cargando',              // cargando | inicio | jugando | cayendo | derrota | victoria
+  px: 0, py: 0, vx: 0, vy: 0,      // posición (pies de Migue) y velocidad
+  camY: 0, camObjetivo: 0,         // cámara: solo sube
+  entrada: { izq: false, der: false },
+  alturaMaxM: 0, recordM: 0,       // récord de la sesión: solo en memoria (sin localStorage)
+  tInicio: 0, tFin: 0,
+  ultimaFilaY: 0, filas: [],       // últimas filas generadas (para ubicar tormentas de forma segura)
+  bloqueoHasta: 0, squash: 0, sacudida: 0, flash: 0, ultimoHudM: -1,
+};
+
+function mostrarPantalla(id) {
+  for (const k of ['carga', 'inicio', 'derrota', 'victoria']) ui[k].classList.toggle('visible', k === id);
+}
+const dificultad = m => clamp01(m / CFG.ALT_META_M);   // 0 al empezar, 1 en la meta
+// Probabilidad que vale 0 antes de una altura y crece de "ini" a "fin" hasta la meta
+const rampa = (m, desde, ini, fin) => m < desde ? 0 : lerp(ini, fin, clamp01((m - desde) / Math.max(1, CFG.ALT_META_M - desde)));
+
+// ---- Uso de los pools ----------------------------------------------------------------------------
+function activarNube(x, y, ancho, vx) {
+  const n = nubes.find(n => !n.activa); if (!n) return null;
+  n.activa = true; n.x = x; n.y = y; n.mitad = ancho / 2; n.vx = vx; n.rebote = 0;
+  n.mesh.visible = true;
+  n.mesh.scale.set(ancho / ANCHO_GEO_NUBE, 0.75, 0.8);
+  n.mesh.position.set(x, y - 0.45, 0);   // "y" es la superficie donde se pisa; la nube queda debajo
+  return n;
+}
+function activarTormenta(x, y) {
+  const t = tormentas.find(t => !t.activa); if (!t) return null;
+  t.activa = true; t.x = x; t.y = y; t.grupo.visible = true; t.grupo.position.set(x, y, 0);
+  return t;
+}
+function desactivarTodo() {
+  for (const n of nubes) { n.activa = false; n.mesh.visible = false; }
+  for (const t of tormentas) { t.activa = false; t.grupo.visible = false; }
+}
+// Recicla lo que quedó por debajo de la pantalla (así se reutiliza arriba)
+function reciclar() {
+  const limite = J.camY - altoVisible / 2 - 3;
+  for (const n of nubes) if (n.activa && n.y < limite) { n.activa = false; n.mesh.visible = false; }
+  for (const t of tormentas) if (t.activa && t.y < limite) { t.activa = false; t.grupo.visible = false; }
+}
+

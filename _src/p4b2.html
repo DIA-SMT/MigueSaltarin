@@ -1,0 +1,69 @@
+// ---- Cielo y decorado según la altura (interpolación gradual entre capas) -----------------------------
+function actualizarCielo(m) {
+  const capas = CFG.CAPAS;
+  let i = 0; while (i < capas.length - 2 && m >= capas[i + 1].m) i++;
+  const t = clamp01((m - capas[i].m) / (capas[i + 1].m - capas[i].m));
+  matFondo.uniforms.arriba.value.copy(coloresArriba[i]).lerp(coloresArriba[i + 1], t);
+  matFondo.uniforms.abajo.value.copy(coloresAbajo[i]).lerp(coloresAbajo[i + 1], t);
+
+  const op = clamp01((m - CFG.ESTRELLAS_DESDE_M) / (CFG.ESTRELLAS_HASTA_M - CFG.ESTRELLAS_DESDE_M));
+  matEstrellas.opacity = op; matEstrellasGrandes.opacity = op;
+
+  const tT = clamp01((m - CFG.TIERRA_DESDE_M) / (CFG.TIERRA_HASTA_M - CFG.TIERRA_DESDE_M));
+  tierra.visible = tT > 0;
+  matTierra.opacity = tT; matAtmosfera.opacity = 0.4 * tT; matContinentes.opacity = tT; matNubesTierra.opacity = 0.9 * tT;
+
+  const mitad = CFG.NUBES_DECOR_HASTA_M * 0.5;
+  matDecor.opacity = 0.9 * (1 - clamp01((m - mitad) / mitad));
+  matCirros.opacity = 0.7 * clamp01((m - CFG.CIRROS_DESDE_M) / 500) * (1 - clamp01((m - (CFG.CIRROS_HASTA_M - 700)) / 700));
+
+  luzHemi.groundColor.copy(sueloClaro).lerp(sueloOscuro, dificultad(m));   // luz más fría en la altura
+}
+
+// ---- Actualización visual por cuadro -------------------------------------------------------------------
+function actualizarVisual(dt, ahora) {
+  // Cámara suave, solo hacia arriba, con sacudida al chocar
+  J.camY += (J.camObjetivo - J.camY) * (1 - Math.exp(-9 * dt));
+  J.sacudida = Math.max(0, J.sacudida - dt * 1.4);
+  const sx = Math.sin(ahora * 0.05) * J.sacudida * 0.5, sy = Math.cos(ahora * 0.043) * J.sacudida * 0.4;
+  camara.position.set(sx, J.camY + sy, camDist);
+  camara.lookAt(sx, J.camY + sy, 0);
+
+  // Migue: inclinación con la velocidad, giro al chocar, "squash" al rebotar
+  J.squash = Math.max(0, J.squash - dt * 5);
+  migue.position.set(J.px, J.py, 0);
+  migue.scale.set(1 + 0.25 * J.squash, 1 - 0.3 * J.squash, 1 + 0.25 * J.squash);
+  if (J.estado === 'inicio') {
+    pivote.rotation.y += dt * 1.1;                            // en la pantalla de inicio gira mostrándose
+    migue.position.y = J.py + Math.sin(ahora * 0.002) * 0.12;
+  } else if (J.estado === 'cayendo') {
+    migue.rotation.z += dt * 7;
+  } else {
+    const k = 1 - Math.exp(-10 * dt);
+    migue.rotation.z = lerp(migue.rotation.z, -J.vx * 0.04, k);
+    pivote.rotation.y = lerp(pivote.rotation.y, CFG.MIGUE_ROT_Y + clamp(J.vx * 0.09, -0.7, 0.7), k);
+  }
+
+  // Nubes: rebotan un poquito al pisarlas. Tormentas: el rayo parpadea y la nube flota.
+  for (const n of nubes) if (n.activa && n.rebote > 0) { n.rebote = Math.max(0, n.rebote - dt * 4); n.mesh.scale.y = 0.75 * (1 - 0.35 * n.rebote); }
+  for (const t of tormentas) if (t.activa) {
+    t.t += dt;
+    t.rayo.visible = (Math.sin(t.t * 9) + Math.sin(t.t * 23)) > -0.6;
+    t.grupo.position.y = t.y + Math.sin(t.t * 2) * 0.06;
+  }
+
+  // Fondo y decorado según la altura de la CÁMARA (así no titila cuando Migue cae)
+  const mCam = metros(J.camY - CFG.CAM_OFFSET_Y);
+  actualizarCielo(mCam);
+  actualizarEstrellas(J.camY);
+  reciclarDecor(nubesDecor, dt, J.camY); reciclarDecor(cirros, dt, J.camY);
+  tierra.position.set(0, J.camY - 43, -46); tierra.rotation.y += dt * 0.04;
+
+  // Destello rojo al chocar
+  if (J.flash > 0) { J.flash = Math.max(0, J.flash - dt * 2.5); ui.flash.style.opacity = J.flash; }
+
+  // HUD: altura actual (solo tocamos el DOM cuando cambia el número)
+  const mHud = J.estado === 'inicio' ? 0 : Math.floor(Math.max(0, metros(J.py)));
+  if (mHud !== J.ultimoHudM) { J.ultimoHudM = mHud; ui.altura.textContent = formatoMetros(mHud); }
+}
+

@@ -1,0 +1,92 @@
+// ---- Generación procedural -------------------------------------------------------------------------
+// Cada fila tiene una nube "principal" que SIEMPRE es alcanzable desde la principal de la fila
+// anterior: separación vertical < altura del salto y corrimiento horizontal ≤ DX_MAX_FILA.
+function generarFila() {
+  const prev = J.filas[J.filas.length - 1];
+  const m = metros(prev.y), t = dificultad(m);
+  const sep = azar(lerp(CFG.SEP_NUBES_INICIAL[0], CFG.SEP_NUBES_FINAL[0], t), lerp(CFG.SEP_NUBES_INICIAL[1], CFG.SEP_NUBES_FINAL[1], t));
+  const y = prev.y + sep;
+  const ancho = lerp(CFG.ANCHO_NUBE_INICIAL, CFG.ANCHO_NUBE_FINAL, t);
+  const probMovil = rampa(m, CFG.ALT_NUBES_MOVILES_M, CFG.PROB_NUBE_MOVIL_INICIAL, CFG.PROB_NUBE_MOVIL_FINAL);
+  const velMovil = () => signo() * azar(CFG.VEL_NUBE_MOVIL[0], CFG.VEL_NUBE_MOVIL[1]);
+
+  // ¿Va una tormenta entre esta fila y la anterior? Se decide ANTES de crear las nubes: en una
+  // "fila con tormenta" las nubes nuevas son fijas, y hace falta que la principal anterior también lo
+  // sea. Así el camino seguro (principal → principal) no se mueve y la tormenta nunca puede bloquearlo.
+  const probT = rampa(m, CFG.ALT_TORMENTAS_M, CFG.PROB_TORMENTA_INICIAL, CFG.PROB_TORMENTA_FINAL);
+  const conTormenta = !prev.principalMovil && Math.random() < probT;
+
+  // Nube principal
+  // Corrimiento horizontal REALMENTE alcanzable para esta separación: lo que Migue recorre a velocidad
+  // máxima en el tiempo que tarda en volver bajando a la altura "sep" (descontando la aceleración desde 0).
+  const g = -CFG.GRAVEDAD, F = CFG.FUERZA_SALTO;
+  const tBajada = (F + Math.sqrt(Math.max(0, F * F - 2 * g * sep))) / g;
+  const alcance = CFG.VEL_MAX_X * tBajada - (CFG.VEL_MAX_X * CFG.VEL_MAX_X) / (2 * CFG.ACEL_X);
+  const dxMax = Math.min(CFG.DX_MAX_FILA, alcance * 0.9);
+  const x1 = envolverX(prev.xPrincipal + azar(-dxMax, dxMax));
+  const movil1 = !conTormenta && Math.random() < probMovil;
+  if (!activarNube(x1, y, ancho, movil1 ? velMovil() : 0)) return false;   // pool agotado (no debería pasar)
+  const fila = { y, xPrincipal: x1, xs: [x1], principalMovil: movil1 };
+
+  // Segunda nube (opcional), bien separada de la principal
+  if (Math.random() < lerp(CFG.PROB_SEGUNDA_NUBE_INICIAL, CFG.PROB_SEGUNDA_NUBE_FINAL, t)) {
+    const x2 = envolverX(x1 + signo() * azar(4.5, CFG.ANCHO_MUNDO / 2));
+    const movil2 = !conTormenta && Math.random() < probMovil;
+    if (activarNube(x2, y, ancho, movil2 ? velMovil() : 0)) fila.xs.push(x2);
+  }
+  if (conTormenta) colocarTormenta(prev, fila);
+
+  J.filas.push(fila); if (J.filas.length > 6) J.filas.shift();
+  J.ultimaFilaY = y;
+  return true;
+}
+// La tormenta se ubica lejos del trayecto recto entre las dos nubes principales (en espacio
+// envuelto) y lejos de cualquier nube de las dos filas. Si no hay lugar, no se pone.
+function colocarTormenta(filaAbajo, filaArriba) {
+  const seg = CFG.SEG_TORMENTA, a = filaAbajo.xPrincipal, d = envolverX(filaArriba.xPrincipal - a);
+  const yT = (filaAbajo.y + filaArriba.y) / 2 + azar(-0.15, 0.15);
+  for (let intento = 0; intento < 14; intento++) {
+    const x = azar(-CFG.ANCHO_MUNDO / 2, CFG.ANCHO_MUNDO / 2);
+    let libre = true;
+    for (let k = 0; k <= 8 && libre; k++) if (distX(x, a + d * k / 8) < seg) libre = false;   // muestreo del camino a→b
+    if (!libre) continue;
+    if (filaAbajo.xs.concat(filaArriba.xs).some(px => distX(x, px) < seg)) continue;
+    activarTormenta(x, yT);
+    return true;
+  }
+  return false;
+}
+function generarHastaCubrir() {   // genera filas hasta pasar el borde superior de la pantalla
+  const tope = J.camY + altoVisible / 2 + 6;
+  let guardia = 0;
+  while (J.ultimaFilaY < tope && guardia++ < 60) if (!generarFila()) break;
+}
+
+// ---- Estados -----------------------------------------------------------------------------------------
+function reiniciar() {   // arma un mundo nuevo con Migue parado en la nube de partida
+  desactivarTodo();
+  J.px = 0; J.py = 0; J.vx = 0; J.vy = 0;
+  J.camY = J.camObjetivo = CFG.CAM_OFFSET_Y;
+  J.alturaMaxM = 0; J.squash = 0; J.sacudida = 0; J.flash = 0; J.ultimoHudM = -1;
+  J.filas = [{ y: 0, xPrincipal: 0, xs: [0], principalMovil: false }];
+  J.ultimaFilaY = 0;
+  activarNube(0, 0, 4.6, 0);   // nube de partida, ancha
+  generarHastaCubrir();
+  migue.rotation.set(0, 0, 0); pivote.rotation.set(0, CFG.MIGUE_ROT_Y, 0);
+  ui.flash.style.opacity = 0;
+}
+function prepararInicio() {
+  reiniciar();
+  J.estado = 'inicio';
+  mostrarPantalla('inicio');
+  ui.hud.style.opacity = 0;
+}
+function empezar() {
+  J.estado = 'jugando';
+  J.vy = CFG.FUERZA_SALTO;
+  J.tInicio = performance.now();
+  mostrarPantalla(null);
+  ui.hud.style.opacity = 1;
+  Sonido.duckear(1);
+}
+

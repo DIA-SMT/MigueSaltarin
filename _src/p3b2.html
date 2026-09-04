@@ -1,0 +1,67 @@
+// ---- Decorado: nubes de fondo (parallax por profundidad) y cirros -------------------------------
+const nubesDecor = [], cirros = [];
+for (let i = 0; i < 12; i++) {
+  const m = new THREE.Mesh(geoNube, matDecor);
+  const s = azar(1.6, 3.4); m.scale.set(s, s * 0.8, s);
+  m.position.set(azar(-28, 28), azar(-14, 20), azar(-14, -28));
+  m.userData.vx = azar(0.15, 0.5) * signo();
+  escena.add(m); nubesDecor.push(m);
+}
+for (let i = 0; i < 8; i++) {
+  const m = new THREE.Mesh(geoNube, matCirros);
+  m.scale.set(azar(4, 7), 0.35, 1.2);
+  m.position.set(azar(-30, 30), azar(-14, 20), azar(-20, -32));
+  m.userData.vx = azar(0.3, 0.8) * signo();
+  escena.add(m); cirros.push(m);
+}
+// Deriva lenta en X y reciclado: lo que queda muy abajo de la cámara reaparece arriba
+function reciclarDecor(lista, dt, camY) {
+  for (const m of lista) {
+    m.position.x += m.userData.vx * dt;
+    if (m.position.x > 34) m.position.x = -34; else if (m.position.x < -34) m.position.x = 34;
+    if (m.position.y < camY - 20) { m.position.y += 40 + azar(0, 6); m.position.x = azar(-30, 30); }
+  }
+}
+
+// ---- Estrellas: puntos "embaldosados" verticalmente (dos baldosas que se alternan) ---------------
+// Así parecen fijas en el mundo (hay parallax real por la profundidad) sin mover 1000 puntos por cuadro.
+const ALTO_BALDOSA = 100;
+const matEstrellas = new THREE.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false });
+const matEstrellasGrandes = matEstrellas.clone(); matEstrellasGrandes.size = 3.4;
+function crearEstrellas(cant, mat) {
+  const pos = new Float32Array(cant * 3);
+  for (let i = 0; i < cant; i++) { pos[i * 3] = azar(-95, 95); pos[i * 3 + 1] = azar(0, ALTO_BALDOSA); pos[i * 3 + 2] = azar(-95, -50); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const p = new THREE.Points(g, mat); p.frustumCulled = false; escena.add(p); return p;
+}
+const baldosas = [crearEstrellas(650, matEstrellas), crearEstrellas(650, matEstrellas)];
+const baldosasGrandes = [crearEstrellas(220, matEstrellasGrandes), crearEstrellas(220, matEstrellasGrandes)];
+function actualizarEstrellas(camY) {
+  const k = Math.floor((camY - ALTO_BALDOSA / 2) / ALTO_BALDOSA), par = ((k % 2) + 2) % 2;
+  for (const par2 of [baldosas, baldosasGrandes]) { par2[par].position.y = k * ALTO_BALDOSA; par2[1 - par].position.y = (k + 1) * ALTO_BALDOSA; }
+}
+
+// ---- La Tierra: aparece abajo cuando se llega al espacio ------------------------------------------
+const matTierra      = new THREE.MeshLambertMaterial({ color: colorLineal('#2f6fd8'), emissive: colorLineal('#0a1a40'), transparent: true, opacity: 0 });
+const matAtmosfera   = new THREE.MeshBasicMaterial({ color: colorLineal('#7fc0ff'), transparent: true, opacity: 0, side: THREE.BackSide, depthWrite: false });
+const matContinentes = new THREE.MeshLambertMaterial({ color: colorLineal('#3f9a4a'), transparent: true, opacity: 0 });
+const matNubesTierra = new THREE.MeshLambertMaterial({ color: colorLineal('#ffffff'), transparent: true, opacity: 0 });
+const tierra = new THREE.Group();
+tierra.add(new THREE.Mesh(new THREE.SphereGeometry(30, 40, 24), matTierra));
+tierra.add(new THREE.Mesh(new THREE.SphereGeometry(33, 40, 24), matAtmosfera));   // BackSide: se ve como un halo alrededor del borde
+(function crearManchas() {   // continentes y nubes: bolas achatadas pegadas a la esfera
+  const arriba = new THREE.Vector3(0, 1, 0);
+  for (let i = 0; i < 16; i++) {
+    const esNube = i >= 9;
+    const dir = new THREE.Vector3(azar(-1, 1), azar(-1, 1), azar(-1, 1)).normalize();
+    const m = new THREE.Mesh(geoNube, esNube ? matNubesTierra : matContinentes);
+    const s = esNube ? azar(2.5, 5) : azar(4, 9);
+    m.scale.set(s, esNube ? 0.6 : 1.1, s * azar(0.6, 1.4));
+    m.position.copy(dir).multiplyScalar(esNube ? 30.4 : 29.7);
+    m.quaternion.setFromUnitVectors(arriba, dir);
+    tierra.add(m);
+  }
+})();
+tierra.visible = false;
+escena.add(tierra);
+

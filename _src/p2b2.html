@@ -1,0 +1,70 @@
+  function acorde(t, semis, dur) {   // power chord: fundamental + quinta + octava, con distorsión
+    const f = 110 * Math.pow(2, semis / 12);
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(0.9, t + 0.006);
+    env.gain.setValueAtTime(0.9, t + dur * 0.65);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    env.connect(guitarraBus);
+    [[0, 'sawtooth'], [7, 'square'], [12, 'sawtooth']].forEach(([s, tipo], i) => {
+      const o = ctx.createOscillator(); o.type = tipo;
+      o.frequency.value = f * Math.pow(2, s / 12); o.detune.value = (i - 1) * 7;
+      o.connect(env); o.start(t); o.stop(t + dur + 0.03);
+    });
+  }
+  function bombo(t) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
+    g.gain.setValueAtTime(1.1, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+    o.connect(g).connect(bateriaBus); o.start(t); o.stop(t + 0.3);
+  }
+  function ruido(t, dur, freq, vol, tipo, bus) {
+    const src = ctx.createBufferSource(); src.buffer = ruidoBlanco();
+    const f = ctx.createBiquadFilter(); f.type = tipo; f.frequency.value = freq;
+    const g = ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    src.connect(f).connect(g).connect(bus); src.start(t); src.stop(t + dur + 0.02);
+  }
+  function redoblante(t) {
+    ruido(t, 0.18, 1600, 0.75, 'highpass', bateriaBus);
+    const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'triangle';
+    o.frequency.setValueAtTime(220, t); o.frequency.exponentialRampToValueAtTime(120, t + 0.08);
+    g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+    o.connect(g).connect(bateriaBus); o.start(t); o.stop(t + 0.12);
+  }
+  function programar() {   // planificador con anticipación de 200 ms
+    while (proximoTiempo < ctx.currentTime + 0.2) {
+      const p = paso % PASOS, ciclo = Math.floor(paso / PASOS);
+      const riff = (ciclo % 4 === 3) ? RIFF_B : RIFF_A;
+      for (const [s, semi, dur] of riff) if (s === p) acorde(proximoTiempo, semi, dur * PASO_S * 0.95);
+      if (BOMBO.includes(p)) bombo(proximoTiempo);
+      if (REDOBLANTE.includes(p)) redoblante(proximoTiempo);
+      if (p % 2 === 0) ruido(proximoTiempo, 0.05, 7000, p % 4 === 0 ? 0.3 : 0.16, 'highpass', bateriaBus);   // hi-hat
+      proximoTiempo += PASO_S; paso++;
+    }
+  }
+
+  // Baja/sube el volumen de la música (factor 1 = normal). Se usa en las pantallas de fin.
+  function duckear(factor) {
+    if (elemento) elemento.volume = CFG.VOLUMEN_MUSICA * factor;
+    if (musicaGain) musicaGain.gain.setTargetAtTime(CFG.VOLUMEN_MUSICA * 0.55 * factor, ctx.currentTime, 0.15);
+  }
+
+  // ---- Efectos de sonido ----------------------------------------------------------
+  function tono(tipo, f0, f1, dur, vol, t0) {
+    const t = t0 !== undefined ? t0 : ctx.currentTime;
+    const o = ctx.createOscillator(), g = ctx.createGain(); o.type = tipo;
+    o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(master); o.start(t); o.stop(t + dur + 0.02);
+  }
+  const rebote = () => { if (ctx) tono('sine', 380, 760, 0.11, CFG.VOLUMEN_EFECTOS * 0.45); };
+  const golpe  = () => { if (!ctx) return; tono('sawtooth', 320, 50, 0.5, CFG.VOLUMEN_EFECTOS * 0.7); ruido(ctx.currentTime, 0.35, 900, CFG.VOLUMEN_EFECTOS * 0.8, 'lowpass', master); };
+  const caida  = () => { if (ctx) tono('triangle', 900, 180, 0.7, CFG.VOLUMEN_EFECTOS * 0.5); };
+  const victoria = () => {
+    if (!ctx) return;
+    [0, 4, 7, 12, 16, 19, 24].forEach((s, i) => { const f = 440 * Math.pow(2, s / 12); tono('triangle', f, f, 0.35, CFG.VOLUMEN_EFECTOS * 0.5, ctx.currentTime + i * 0.11); });
+  };
+
+  return { iniciar, duckear, rebote, golpe, caida, victoria };
+})();
+

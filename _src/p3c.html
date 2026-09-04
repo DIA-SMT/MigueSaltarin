@@ -1,0 +1,58 @@
+// ---- Migue: grupo con los pies en el origen; adentro un pivote para girar el modelo ---------------
+const migue = new THREE.Group(); escena.add(migue);
+const pivote = new THREE.Group(); migue.add(pivote);
+let modeloCargado = false;
+
+// Placeholder si el modelo no carga: cápsula naranja con dos ojos (el juego funciona igual)
+function crearPlaceholder() {
+  const g = new THREE.Group();
+  const cuerpo = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 0.85, 4, 12), new THREE.MeshLambertMaterial({ color: colorLineal('#ff7a2e') }));
+  cuerpo.position.y = 0.85;   // largo 0.85 + 2 radios 0.42 = 1.69 de alto, pies en y = 0
+  const ojoGeo = new THREE.SphereGeometry(0.09, 8, 6), ojoMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+  const ojoI = new THREE.Mesh(ojoGeo, ojoMat); ojoI.position.set(-0.15, 1.25, 0.37);
+  const ojoD = ojoI.clone(); ojoD.position.x = 0.15;
+  g.add(cuerpo, ojoI, ojoD);
+  return g;
+}
+// Escala el modelo a ALTO_MIGUE, lo centra en X/Z y deja los pies en y = 0
+function normalizarModelo(raiz) {
+  const caja = new THREE.Box3().setFromObject(raiz);
+  const tam = caja.getSize(new THREE.Vector3());
+  raiz.scale.setScalar(CFG.ALTO_MIGUE / (tam.y || 1));
+  caja.setFromObject(raiz);
+  const centro = caja.getCenter(new THREE.Vector3());
+  raiz.position.set(-centro.x, -caja.min.y, -centro.z);
+  raiz.traverse(o => {
+    if (!o.isMesh) return;
+    o.frustumCulled = false;
+    const m = o.material; if (m) { m.metalness = 0; m.roughness = 0.9; m.envMapIntensity = 0; }
+  });
+}
+function decodificarB64(b64) {
+  const bin = atob(b64), bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
+// Orden de intentos: 1) migue.glb en la misma carpeta  2) copia embebida en base64  3) placeholder
+async function cargarMigue() {
+  const loader = new THREE.GLTFLoader();
+  const parsear = buffer => new Promise((ok, err) => loader.parse(buffer, '', ok, err));
+  const fuentes = [
+    ['migue.glb (archivo)', () => loader.loadAsync('migue.glb')],
+    ['modelo embebido', () => {
+      const b64 = window.MIGUE_GLB_B64;
+      if (!b64 || b64.charAt(0) === '_') throw new Error('sin modelo embebido');
+      return parsear(decodificarB64(b64));
+    }],
+  ];
+  for (const [nombre, fn] of fuentes) {
+    try {
+      const gltf = await fn();
+      normalizarModelo(gltf.scene); pivote.add(gltf.scene); modeloCargado = true;
+      console.log('Migue cargado desde: ' + nombre);
+      return;
+    } catch (e) { console.warn('No se pudo cargar Migue desde ' + nombre + ':', e && e.message ? e.message : e); }
+  }
+  pivote.add(crearPlaceholder());
+}
+
